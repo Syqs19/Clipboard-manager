@@ -174,6 +174,13 @@ impl Db {
         Self::collect(&conn, &sql, params![like])
     }
 
+    /// Una singola clip con il contenuto completo (per copiare anche i sensibili).
+    pub fn get_clip(&self, id: i64) -> rusqlite::Result<Option<Clip>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!("SELECT {SELECT_COLS} FROM clips WHERE id = ?1");
+        Ok(Self::collect(&conn, &sql, params![id])?.pop())
+    }
+
     pub fn set_pinned(&self, clip_id: i64, pinned: bool) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -251,13 +258,24 @@ impl Db {
         Ok(())
     }
 
+    /// Stacca un tag da una clip dato il nome (per i tag rimossi dalla UI).
+    pub fn remove_tag_by_name(&self, clip_id: i64, name: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM clip_tags
+             WHERE clip_id = ?1 AND tag_id = (SELECT id FROM tags WHERE name = ?2)",
+            params![clip_id, name],
+        )?;
+        Ok(())
+    }
+
     /// (nome_tag, conteggio_clip) per la sidebar "Categorie".
     pub fn list_tags_with_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT t.name, COUNT(ct.clip_id)
+            "SELECT t.name, COUNT(ct.clip_id) AS n
              FROM tags t LEFT JOIN clip_tags ct ON ct.tag_id = t.id
-             GROUP BY t.id ORDER BY t.name",
+             GROUP BY t.id HAVING n > 0 ORDER BY t.name",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
         rows.collect()

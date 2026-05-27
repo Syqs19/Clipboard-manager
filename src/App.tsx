@@ -1,50 +1,90 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, onClipsChanged, type Clip } from "./lib/api";
+import { Sidebar, type Filter } from "./components/Sidebar";
+import { SearchBar } from "./components/SearchBar";
+import { ClipList } from "./components/ClipList";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [clips, setClips] = useState<Clip[]>([]);
+  const [tags, setTags] = useState<[string, number][]>([]);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>({ kind: "all" });
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const reload = useCallback(async () => {
+    const data = query.trim()
+      ? await api.searchClips(query)
+      : await api.listClips();
+    setClips(data);
+    setTags(await api.listTags());
+  }, [query]);
+
+  // ricarica al mount e quando cambia la ricerca
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // si sottoscrive una sola volta agli eventi del watcher
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onClipsChanged(() => reloadRef.current()).then((u) => (unlisten = u));
+    return () => unlisten?.();
+  }, []);
+
+  const visible = clips.filter((c) => {
+    if (filter.kind === "pinned") return c.pinned;
+    if (filter.kind === "tag") return c.tags.includes(filter.name);
+    return true;
+  });
+
+  const handleCopy = (id: number) => {
+    api.copyClip(id);
+  };
+  const handlePin = async (clip: Clip) => {
+    await api.togglePin(clip.id, !clip.pinned);
+    reload();
+  };
+  const handleDelete = async (id: number) => {
+    await api.removeClip(id);
+    reload();
+  };
+  const handleAddTag = async (id: number, name: string) => {
+    await api.addTag(id, name);
+    reload();
+  };
+  const handleRemoveTag = async (id: number, name: string) => {
+    await api.removeTag(id, name);
+    reload();
+  };
+
+  const pinnedCount = clips.filter((c) => c.pinned).length;
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <div className="flex h-screen w-screen overflow-hidden bg-zinc-900 text-zinc-100">
+      <Sidebar
+        filter={filter}
+        onSelect={setFilter}
+        tags={tags}
+        pinnedCount={pinnedCount}
+        totalCount={clips.length}
+      />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="border-b border-zinc-800 p-3">
+          <SearchBar value={query} onChange={setQuery} />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <ClipList
+            clips={visible}
+            onCopy={handleCopy}
+            onTogglePin={handlePin}
+            onDelete={handleDelete}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+          />
+        </div>
+      </main>
+    </div>
   );
 }
 
