@@ -3,15 +3,13 @@
 //! Su Windows `clipboard-master` usa `AddClipboardFormatListener` (eventi, zero
 //! polling): la callback scatta solo quando la clipboard cambia davvero. Ogni
 //! nuovo contenuto viene categorizzato e scritto subito nel DB (in WAL), così un
-//! crash non perde nulla.
-//!
-//! NOTA: per ora cattura solo testo/URL. La cattura immagini è un incremento
-//! successivo (richiede encoder PNG + gestione file).
+//! crash non perde nulla. Gestisce testo/URL e immagini (salvate come PNG).
 
-use crate::categorizer;
 use crate::db::{self, Db, NewClip};
+use crate::{categorizer, images};
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
 use std::io;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
@@ -21,6 +19,7 @@ struct Handler {
     db: Arc<Db>,
     paused: Arc<AtomicBool>,
     max_history: Arc<AtomicI64>,
+    images_dir: PathBuf,
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
     last_hash: Option<String>,
@@ -45,22 +44,25 @@ impl ClipboardHandler for Handler {
 
 impl Handler {
     fn capture(&mut self) -> Result<(), String> {
-        // Solo testo/URL per ora: se non c'è testo (immagine/file), ignora.
-        let mut text = match self.clipboard.get_text() {
-            Ok(t) => t,
-            Err(_) => return Ok(()),
-        };
-        // rimuovi un eventuale BOM iniziale (artefatto di alcune app/strumenti)
-        if let Some(stripped) = text.strip_prefix('\u{feff}') {
-            text = stripped.to_string();
+        // Priorità al testo; se non c'è, prova l'immagine.
+        if let Ok(mut text) = self.clipboard.get_text() {
+            if let Some(stripped) = text.strip_prefix('\u{feff}') {
+                text = stripped.to_string();
+            }
+            if !text.trim().is_empty() {
+                return self.capture_text(text);
+            }
         }
-        if text.trim().is_empty() {
-            return Ok(());
+        if let Ok(img) = self.clipboard.get_image() {
+            return self.capture_image(img);
         }
+        Ok(())
+    }
 
+    fn capture_text(&mut self, text: String) -> Result<(), String> {
         let hash = db::content_hash(&text);
         if self.last_hash.as_deref() == Some(hash.as_str()) {
-            return Ok(()); // stesso contenuto dell'evento precedente
+            return Ok(());
         }
         self.last_hash = Some(hash.clone());
 
@@ -76,17 +78,45 @@ impl Handler {
             sensitive: cat.sensitive,
             hash,
         };
-
         let id = self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
-        // tag automatico suggerito
         if let Ok(tag_id) = self.db.get_or_create_tag(cat.tag, None, true) {
             let _ = self.db.attach_tag(id, tag_id);
         }
-        let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
-
-        // avvisa il frontend che la cronologia è cambiata
-        let _ = self.app.emit("clips-changed", ());
+        self.finish();
         Ok(())
+    }
+
+    fn capture_image(&mut self, img: arboard::ImageData) -> Result<(), String> {
+        let hash = db::bytes_hash(&img.bytes);
+        if self.last_hash.as_deref() == Some(hash.as_str()) {
+            return Ok(());
+        }
+        self.last_hash = Some(hash.clone());
+
+        let path = self.images_dir.join(format!("{hash}.png"));
+        if !path.exists() {
+            images::save_rgba_png(&path, img.width as u32, img.height as u32, &img.bytes)?;
+        }
+        let new = NewClip {
+            content: None,
+            content_type: "image".into(),
+            image_path: Some(path.to_string_lossy().to_string()),
+            preview: format!("Immagine {}×{}", img.width, img.height),
+            created_at: db::now_millis(),
+            char_count: 0,
+            sensitive: false,
+            hash,
+        };
+        // niente tag automatico: le immagini hanno la loro sezione dedicata
+        self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
+        self.finish();
+        Ok(())
+    }
+
+    /// Pota la cronologia e notifica il frontend.
+    fn finish(&self) {
+        let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
+        let _ = self.app.emit("clips-changed", ());
     }
 }
 
@@ -96,6 +126,7 @@ pub fn start(
     db: Arc<Db>,
     paused: Arc<AtomicBool>,
     max_history: Arc<AtomicI64>,
+    images_dir: PathBuf,
 ) {
     std::thread::spawn(move || {
         let clipboard = match arboard::Clipboard::new() {
@@ -110,6 +141,7 @@ pub fn start(
             db,
             paused,
             max_history,
+            images_dir,
             clipboard,
             last_hash: None,
         };

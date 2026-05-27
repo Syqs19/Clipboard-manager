@@ -1,8 +1,9 @@
-import { Clock, Pin, Hash } from "lucide-react";
+import { Clock, Pin, Hash, Image } from "lucide-react";
 
 export type Filter =
   | { kind: "all" }
   | { kind: "pinned" }
+  | { kind: "images" }
   | { kind: "tag"; name: string };
 
 function sameFilter(a: Filter, b: Filter): boolean {
@@ -47,12 +48,14 @@ export function Sidebar({
   onSelect,
   tags,
   pinnedCount,
+  imageCount,
   totalCount,
 }: {
   filter: Filter;
   onSelect: (f: Filter) => void;
   tags: [string, number][];
   pinnedCount: number;
+  imageCount: number;
   totalCount: number;
 }) {
   return (
@@ -66,6 +69,13 @@ export function Sidebar({
           icon={<Pin className="h-4 w-4" />}
           label="Fissati"
           count={pinnedCount}
+        />
+        <Item
+          active={sameFilter(filter, { kind: "images" })}
+          onClick={() => onSelect({ kind: "images" })}
+          icon={<Image className="h-4 w-4" />}
+          label="Immagini"
+          count={imageCount}
         />
         <Item
           active={sameFilter(filter, { kind: "all" })}

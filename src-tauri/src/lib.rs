@@ -2,6 +2,7 @@ mod categorizer;
 mod clipboard_watcher;
 mod commands;
 mod db;
+mod images;
 mod settings;
 mod tray;
 
@@ -44,6 +45,21 @@ pub fn run() {
             let database =
                 Arc::new(db::Db::open(data_dir.join("clips.db")).expect("apertura DB fallita"));
 
+            // cartella immagini + pulizia dei PNG orfani (non più referenziati dal DB)
+            let images_dir = data_dir.join("images");
+            std::fs::create_dir_all(&images_dir).ok();
+            if let Ok(referenced) = database.all_image_paths() {
+                let keep: std::collections::HashSet<String> = referenced.into_iter().collect();
+                if let Ok(entries) = std::fs::read_dir(&images_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if !keep.contains(&p.to_string_lossy().to_string()) {
+                            let _ = std::fs::remove_file(p);
+                        }
+                    }
+                }
+            }
+
             // legge le impostazioni persistenti (con default sensati)
             let (max_history, close_to_tray, start_hidden, hotkey) =
                 match app.store("settings.json") {
@@ -85,7 +101,7 @@ pub fn run() {
             app.manage(runtime);
 
             // avvia il monitoraggio della clipboard in background
-            clipboard_watcher::start(app.handle().clone(), database, paused, max_hist);
+            clipboard_watcher::start(app.handle().clone(), database, paused, max_hist, images_dir);
 
             // hotkey globale (salvata o default); se non valida, ripiega sul default
             if app.global_shortcut().register(hotkey.as_str()).is_err() {

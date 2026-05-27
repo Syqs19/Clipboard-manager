@@ -5,6 +5,7 @@ import { ClipCard } from "./ClipCard";
 export function ClipList({
   clips,
   onCopy,
+  onPreview,
   onTogglePin,
   onDelete,
   onAddTag,
@@ -12,6 +13,7 @@ export function ClipList({
 }: {
   clips: Clip[];
   onCopy: (id: number) => void;
+  onPreview: (clip: Clip) => void;
   onTogglePin: (clip: Clip) => void;
   onDelete: (id: number) => void;
   onAddTag: (id: number, name: string) => void;
@@ -33,6 +35,7 @@ export function ClipList({
           key={clip.id}
           clip={clip}
           onCopy={onCopy}
+          onPreview={onPreview}
           onTogglePin={onTogglePin}
           onDelete={onDelete}
           onAddTag={onAddTag}

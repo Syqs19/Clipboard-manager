@@ -6,6 +6,7 @@ import { Sidebar, type Filter } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
 import { Settings } from "./components/Settings";
+import { ImagePreview } from "./components/ImagePreview";
 
 function App() {
   const [clips, setClips] = useState<Clip[]>([]);
@@ -13,6 +14,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [previewClip, setPreviewClip] = useState<Clip | null>(null);
 
   const reload = useCallback(async () => {
     const data = query.trim()
@@ -27,14 +29,17 @@ function App() {
     reload();
   }, [reload]);
 
-  // ESC nasconde la finestra (coerente con l'hotkey/tray)
+  // ESC: chiude prima i modal aperti, altrimenti nasconde la finestra
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") getCurrentWindow().hide();
+      if (e.key !== "Escape") return;
+      if (previewClip) setPreviewClip(null);
+      else if (settingsOpen) setSettingsOpen(false);
+      else getCurrentWindow().hide();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [previewClip, settingsOpen]);
 
   // si sottoscrive una sola volta agli eventi del watcher
   const reloadRef = useRef(reload);
@@ -54,9 +59,11 @@ function App() {
 
   const visible = clips.filter((c) => {
     if (filter.kind === "pinned") return c.pinned;
+    if (filter.kind === "images") return c.content_type === "image";
     if (filter.kind === "tag") return c.tags.includes(filter.name);
     return true;
   });
+  const imageCount = clips.filter((c) => c.content_type === "image").length;
 
   const handleCopy = (id: number) => {
     api.copyClip(id);
@@ -87,6 +94,7 @@ function App() {
         onSelect={setFilter}
         tags={tags}
         pinnedCount={pinnedCount}
+        imageCount={imageCount}
         totalCount={clips.length}
       />
       <main className="flex min-w-0 flex-1 flex-col">
@@ -106,6 +114,7 @@ function App() {
           <ClipList
             clips={visible}
             onCopy={handleCopy}
+            onPreview={setPreviewClip}
             onTogglePin={handlePin}
             onDelete={handleDelete}
             onAddTag={handleAddTag}
@@ -118,6 +127,12 @@ function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onReload={reload}
+      />
+
+      <ImagePreview
+        clip={previewClip}
+        onClose={() => setPreviewClip(null)}
+        onCopy={handleCopy}
       />
     </div>
   );

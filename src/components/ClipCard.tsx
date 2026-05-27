@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, Eye, EyeOff, Pin, Plus, Trash2, X } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { type Clip } from "../lib/api";
 import { maskSensitive, relativeTime } from "../lib/format";
 
@@ -33,6 +34,7 @@ function IconButton({
 export function ClipCard({
   clip,
   onCopy,
+  onPreview,
   onTogglePin,
   onDelete,
   onAddTag,
@@ -40,6 +42,7 @@ export function ClipCard({
 }: {
   clip: Clip;
   onCopy: (id: number) => void;
+  onPreview: (clip: Clip) => void;
   onTogglePin: (clip: Clip) => void;
   onDelete: (id: number) => void;
   onAddTag: (id: number, name: string) => void;
@@ -52,6 +55,7 @@ export function ClipCard({
 
   const masked = clip.sensitive && !revealed;
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
+  const isImage = clip.content_type === "image" && !!clip.image_path;
 
   const triggerCopy = () => {
     onCopy(clip.id);
@@ -68,20 +72,28 @@ export function ClipCard({
 
   return (
     <div
-      onClick={triggerCopy}
+      onClick={() => (isImage ? onPreview(clip) : triggerCopy())}
       className={`group relative cursor-pointer rounded-lg border bg-zinc-800/30 p-3 transition-all hover:bg-zinc-800/60 ${
         copied
           ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
           : "border-zinc-800 hover:border-zinc-700"
       }`}
     >
-      <p
-        className={`line-clamp-3 whitespace-pre-wrap break-words text-sm ${
-          masked ? "font-mono tracking-wide text-zinc-400" : "text-zinc-100"
-        }`}
-      >
-        {text || "(vuoto)"}
-      </p>
+      {isImage ? (
+        <img
+          src={convertFileSrc(clip.image_path!)}
+          alt={clip.preview}
+          className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
+        />
+      ) : (
+        <p
+          className={`line-clamp-3 whitespace-pre-wrap break-words text-sm ${
+            masked ? "font-mono tracking-wide text-zinc-400" : "text-zinc-100"
+          }`}
+        >
+          {text || "(vuoto)"}
+        </p>
+      )}
 
       {/* tag + meta */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

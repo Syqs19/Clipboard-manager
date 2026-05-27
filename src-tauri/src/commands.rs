@@ -29,15 +29,27 @@ pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, Str
     }
 }
 
-/// Copia il contenuto completo della clip nella clipboard di sistema.
+/// Copia il contenuto completo della clip nella clipboard di sistema
+/// (testo intero per i sensibili, immagine ricostruita dal PNG per le immagini).
 #[tauri::command]
 pub fn copy_clip(db: State<Database>, id: i64) -> Result<(), String> {
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "clip non trovata".to_string())?;
-    if let Some(content) = clip.content {
-        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+
+    if clip.content_type == "image" {
+        if let Some(path) = clip.image_path {
+            let (w, h, rgba) = crate::images::load_png_rgba(std::path::Path::new(&path))?;
+            cb.set_image(arboard::ImageData {
+                width: w as usize,
+                height: h as usize,
+                bytes: std::borrow::Cow::Owned(rgba),
+            })
+            .map_err(|e| e.to_string())?;
+        }
+    } else if let Some(content) = clip.content {
         cb.set_text(content).map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -50,6 +62,12 @@ pub fn toggle_pin(db: State<Database>, id: i64, pinned: bool) -> Result<(), Stri
 
 #[tauri::command]
 pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
+    // elimina anche l'eventuale file immagine associato
+    if let Ok(Some(clip)) = db.get_clip(id) {
+        if let Some(path) = clip.image_path {
+            let _ = std::fs::remove_file(path);
+        }
+    }
     db.delete_clip(id).map_err(|e| e.to_string())
 }
 

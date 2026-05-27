@@ -53,13 +53,17 @@ pub fn now_millis() -> i64 {
 }
 
 /// Hash deterministico (FNV-1a 64-bit) usato per il dedup. Stabile tra avvii.
-pub fn content_hash(s: &str) -> String {
+pub fn bytes_hash(data: &[u8]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in s.as_bytes() {
+    for b in data {
         hash ^= *b as u64;
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{:016x}", hash)
+}
+
+pub fn content_hash(s: &str) -> String {
+    bytes_hash(s.as_bytes())
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -172,6 +176,15 @@ impl Db {
              ORDER BY pinned DESC, created_at DESC"
         );
         Self::collect(&conn, &sql, params![like])
+    }
+
+    /// Tutti i percorsi immagine referenziati (per ripulire i file orfani).
+    pub fn all_image_paths(&self) -> rusqlite::Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT image_path FROM clips WHERE image_path IS NOT NULL")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect()
     }
 
     /// Una singola clip con il contenuto completo (per copiare anche i sensibili).
