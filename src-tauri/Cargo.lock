@@ -508,6 +508,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "clipboard-master",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
