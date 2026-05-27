@@ -5,8 +5,11 @@
 //! copiabili pur essendo nascosti a schermo.
 
 use crate::db::{Clip, Db};
+use crate::settings::RuntimeState;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 type Database = Arc<Db>;
 
@@ -52,7 +55,7 @@ pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn clear_history(db: State<Database>) -> Result<(), String> {
-    db.clear_all().map_err(|e| e.to_string())
+    db.clear_unpinned().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -75,4 +78,34 @@ pub fn add_tag(db: State<Database>, id: i64, name: String) -> Result<(), String>
 #[tauri::command]
 pub fn remove_tag(db: State<Database>, id: i64, name: String) -> Result<(), String> {
     db.remove_tag_by_name(id, name.trim()).map_err(|e| e.to_string())
+}
+
+// ----- impostazioni (aggiornano lo stato runtime) -----
+
+/// Aggiorna il limite cronologia e pota subito le clip in eccesso.
+#[tauri::command]
+pub fn apply_max_history(
+    state: State<RuntimeState>,
+    db: State<Database>,
+    value: i64,
+) -> Result<(), String> {
+    let v = value.max(1);
+    state.max_history.store(v, Ordering::Relaxed);
+    db.prune_to_limit(v).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Imposta se la X chiude nel tray (true) o esce dall'app (false).
+#[tauri::command]
+pub fn apply_close_to_tray(state: State<RuntimeState>, value: bool) {
+    state.close_to_tray.store(value, Ordering::Relaxed);
+}
+
+/// Cambia l'hotkey globale: deregistra quelle vecchie e registra la nuova.
+/// Ritorna errore se la stringa scorciatoia non è valida.
+#[tauri::command]
+pub fn apply_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    gs.register(shortcut.as_str()).map_err(|e| e.to_string())
 }

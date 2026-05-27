@@ -1,6 +1,6 @@
 //! System tray + gestione della finestra principale (mostra/nascondi/toggle).
 
-use crate::clipboard_watcher::WatcherState;
+use crate::settings::RuntimeState;
 use std::sync::atomic::Ordering;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -48,7 +48,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "open" => show_main_window(app),
             "pause" => {
-                let state = app.state::<WatcherState>();
+                let state = app.state::<RuntimeState>();
                 let now_paused = !state.paused.load(Ordering::Relaxed);
                 state.paused.store(now_paused, Ordering::Relaxed);
                 let _ = pause_item.set_text(if now_paused {

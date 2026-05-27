@@ -2,12 +2,14 @@ mod categorizer;
 mod clipboard_watcher;
 mod commands;
 mod db;
+mod settings;
 mod tray;
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_store::StoreExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,10 +28,13 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .on_window_event(|window, event| {
-            // "chiudi nel tray": la X nasconde la finestra invece di uscire
+            // "chiudi nel tray" configurabile: se attivo la X nasconde, altrimenti esce
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                let state = window.app_handle().state::<settings::RuntimeState>();
+                if state.close_to_tray.load(Ordering::Relaxed) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .setup(|app| {
@@ -38,20 +43,64 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).ok();
             let database =
                 Arc::new(db::Db::open(data_dir.join("clips.db")).expect("apertura DB fallita"));
-            let paused = Arc::new(AtomicBool::new(false));
+
+            // legge le impostazioni persistenti (con default sensati)
+            let (max_history, close_to_tray, start_hidden, hotkey) =
+                match app.store("settings.json") {
+                    Ok(store) => (
+                        store
+                            .get("maxHistory")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(settings::DEFAULT_MAX_HISTORY),
+                        store
+                            .get("closeToTray")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true),
+                        store
+                            .get("startHidden")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        store
+                            .get("hotkey")
+                            .and_then(|v| v.as_str().map(str::to_string))
+                            .unwrap_or_else(|| settings::DEFAULT_HOTKEY.to_string()),
+                    ),
+                    Err(_) => (
+                        settings::DEFAULT_MAX_HISTORY,
+                        true,
+                        false,
+                        settings::DEFAULT_HOTKEY.to_string(),
+                    ),
+                };
+
+            let runtime = settings::RuntimeState {
+                paused: Arc::new(AtomicBool::new(false)),
+                max_history: Arc::new(AtomicI64::new(max_history)),
+                close_to_tray: Arc::new(AtomicBool::new(close_to_tray)),
+            };
+            let paused = runtime.paused.clone();
+            let max_hist = runtime.max_history.clone();
 
             app.manage(database.clone());
-            app.manage(clipboard_watcher::WatcherState { paused: paused.clone() });
+            app.manage(runtime);
 
             // avvia il monitoraggio della clipboard in background
-            clipboard_watcher::start(app.handle().clone(), database, paused);
+            clipboard_watcher::start(app.handle().clone(), database, paused, max_hist);
 
-            // hotkey globale Ctrl+Shift+V per mostrare/nascondere la finestra
-            let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyV);
-            app.global_shortcut().register(hotkey)?;
+            // hotkey globale (salvata o default); se non valida, ripiega sul default
+            if app.global_shortcut().register(hotkey.as_str()).is_err() {
+                let _ = app.global_shortcut().register(settings::DEFAULT_HOTKEY);
+            }
 
             // system tray
             tray::create_tray(app.handle())?;
+
+            // mostra la finestra a meno che non debba partire nascosta nel tray
+            if !start_hidden {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.show();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -64,6 +113,9 @@ pub fn run() {
             commands::list_tags,
             commands::add_tag,
             commands::remove_tag,
+            commands::apply_max_history,
+            commands::apply_close_to_tray,
+            commands::apply_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

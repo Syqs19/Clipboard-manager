@@ -212,9 +212,10 @@ impl Db {
         Ok(n)
     }
 
-    pub fn clear_all(&self) -> rusqlite::Result<()> {
+    /// Svuota la cronologia mantenendo le clip fissate (i clip_tags vanno via in cascata).
+    pub fn clear_unpinned(&self) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch("DELETE FROM clip_tags; DELETE FROM clips;")?;
+        conn.execute("DELETE FROM clips WHERE pinned = 0", [])?;
         Ok(())
     }
 

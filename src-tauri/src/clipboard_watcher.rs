@@ -12,22 +12,15 @@ use crate::categorizer;
 use crate::db::{self, Db, NewClip};
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-
-/// Limite di default della cronologia (verrà reso configurabile dalle impostazioni).
-const HISTORY_LIMIT: i64 = 200;
-
-/// Stato condiviso del watcher, gestito da Tauri (per il "Pausa cattura" del tray).
-pub struct WatcherState {
-    pub paused: Arc<AtomicBool>,
-}
 
 struct Handler {
     app: AppHandle,
     db: Arc<Db>,
     paused: Arc<AtomicBool>,
+    max_history: Arc<AtomicI64>,
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
     last_hash: Option<String>,
@@ -89,7 +82,7 @@ impl Handler {
         if let Ok(tag_id) = self.db.get_or_create_tag(cat.tag, None, true) {
             let _ = self.db.attach_tag(id, tag_id);
         }
-        let _ = self.db.prune_to_limit(HISTORY_LIMIT);
+        let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
 
         // avvisa il frontend che la cronologia è cambiata
         let _ = self.app.emit("clips-changed", ());
@@ -98,7 +91,12 @@ impl Handler {
 }
 
 /// Avvia il monitoraggio su un thread dedicato.
-pub fn start(app: AppHandle, db: Arc<Db>, paused: Arc<AtomicBool>) {
+pub fn start(
+    app: AppHandle,
+    db: Arc<Db>,
+    paused: Arc<AtomicBool>,
+    max_history: Arc<AtomicI64>,
+) {
     std::thread::spawn(move || {
         let clipboard = match arboard::Clipboard::new() {
             Ok(c) => c,
@@ -107,7 +105,14 @@ pub fn start(app: AppHandle, db: Arc<Db>, paused: Arc<AtomicBool>) {
                 return;
             }
         };
-        let handler = Handler { app, db, paused, clipboard, last_hash: None };
+        let handler = Handler {
+            app,
+            db,
+            paused,
+            max_history,
+            clipboard,
+            last_hash: None,
+        };
         match Master::new(handler) {
             Ok(mut master) => {
                 if let Err(e) = master.run() {

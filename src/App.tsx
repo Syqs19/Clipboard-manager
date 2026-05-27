@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, onClipsChanged, type Clip } from "./lib/api";
+import { api, onClipsChanged, onOpenSettings, type Clip } from "./lib/api";
 import { Sidebar, type Filter } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
+import { Settings } from "./components/Settings";
 
 function App() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [tags, setTags] = useState<[string, number][]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const reload = useCallback(async () => {
     const data = query.trim()
@@ -39,6 +42,13 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     onClipsChanged(() => reloadRef.current()).then((u) => (unlisten = u));
+    return () => unlisten?.();
+  }, []);
+
+  // apertura impostazioni dal menu tray
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onOpenSettings(() => setSettingsOpen(true)).then((u) => (unlisten = u));
     return () => unlisten?.();
   }, []);
 
@@ -80,8 +90,17 @@ function App() {
         totalCount={clips.length}
       />
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-zinc-800 p-3">
-          <SearchBar value={query} onChange={setQuery} />
+        <div className="flex items-center gap-2 border-b border-zinc-800 p-3">
+          <div className="flex-1">
+            <SearchBar value={query} onChange={setQuery} />
+          </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Impostazioni"
+            className="rounded-lg border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-400 transition-colors hover:text-zinc-100"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <ClipList
@@ -94,6 +113,12 @@ function App() {
           />
         </div>
       </main>
+
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onReload={reload}
+      />
     </div>
   );
 }

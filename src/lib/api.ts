@@ -28,7 +28,17 @@ export const api = {
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),
+  applyMaxHistory: (value: number) =>
+    invoke<void>("apply_max_history", { value }),
+  applyCloseToTray: (value: boolean) =>
+    invoke<void>("apply_close_to_tray", { value }),
+  applyHotkey: (shortcut: string) => invoke<void>("apply_hotkey", { shortcut }),
 };
+
+/// Evento emesso dal menu tray "Impostazioni".
+export function onOpenSettings(cb: () => void): Promise<UnlistenFn> {
+  return listen("open-settings", cb);
+}
 
 /// Si registra agli eventi "clips-changed" emessi dal watcher.
 export function onClipsChanged(cb: () => void): Promise<UnlistenFn> {
