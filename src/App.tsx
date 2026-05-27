@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, onClipsChanged, type Clip } from "./lib/api";
 import { Sidebar, type Filter } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
@@ -22,6 +23,15 @@ function App() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // ESC nasconde la finestra (coerente con l'hotkey/tray)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") getCurrentWindow().hide();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // si sottoscrive una sola volta agli eventi del watcher
   const reloadRef = useRef(reload);
