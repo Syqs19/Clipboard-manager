@@ -1,8 +1,9 @@
 //! Auto-categorizzazione del contenuto della clipboard.
 //!
-//! Data una stringa di testo, decide il `content_type` ("text" o "url") e un
-//! tag suggerito ("Link", "Email", "Numeri", "Codice", "Testo lungo", "Testo").
-//! Le immagini non passano da qui: il watcher le marca direttamente come "image".
+//! Data una stringa di testo, decide il `content_type` ("text" o "url"), un
+//! tag suggerito ("Link", "Email", "Numeri", "Codice", "Testo lungo", "Testo")
+//! e un flag `sensitive` per i dati da mascherare nella UI (IBAN, carte, email,
+//! token/chiavi). Le immagini non passano da qui: il watcher le marca come "image".
 #![allow(dead_code)] // `categorize` verrà collegato al watcher nello step successivo
 
 use regex::Regex;
@@ -18,7 +19,7 @@ static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$").unwrap()
 });
 
-/// IBAN: 2 lettere + 2 cifre + fino a 30 alfanumerici (spazi opzionali rimossi prima).
+/// IBAN: 2 lettere + 2 cifre + 10-30 alfanumerici (spazi rimossi prima).
 static IBAN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$").unwrap());
 
@@ -29,33 +30,58 @@ pub struct Category {
     pub content_type: &'static str,
     /// Tag suggerito, mostrato all'utente (modificabile).
     pub tag: &'static str,
+    /// Se true, la UI maschera il contenuto (ma resta copiabile/rivelabile).
+    pub sensitive: bool,
 }
 
-/// Classifica un contenuto testuale. L'ordine dei controlli è dal più specifico
-/// al più generico, così un IBAN non viene scambiato per "codice" e uno snippet
-/// lungo resta "Codice" invece di "Testo lungo".
+/// Classifica un contenuto testuale.
 pub fn categorize(content: &str) -> Category {
-    let trimmed = content.trim();
+    // alcune app/strumenti antepongono un BOM (U+FEFF), che non è whitespace:
+    // va rimosso o spezza i match ancorati (URL/email/IBAN).
+    let trimmed = content.trim_start_matches('\u{feff}').trim();
+    let (content_type, tag) = classify(trimmed, content);
+    // gli URL non si mascherano; per il resto applica le regole sui dati sensibili
+    let sensitive = content_type != "url" && is_sensitive(trimmed);
+    Category { content_type, tag, sensitive }
+}
 
+/// Determina (content_type, tag). Ordine dal più specifico al generico, così un
+/// IBAN non diventa "Codice" e uno snippet lungo resta "Codice" non "Testo lungo".
+fn classify(trimmed: &str, original: &str) -> (&'static str, &'static str) {
     if URL_RE.is_match(trimmed) {
-        return Category { content_type: "url", tag: "Link" };
+        return ("url", "Link");
     }
     if EMAIL_RE.is_match(trimmed) {
-        return Category { content_type: "text", tag: "Email" };
+        return ("text", "Email");
     }
     if is_numeric_like(trimmed) {
-        return Category { content_type: "text", tag: "Numeri" };
+        return ("text", "Numeri");
     }
     if looks_like_code(trimmed) {
-        return Category { content_type: "text", tag: "Codice" };
+        return ("text", "Codice");
     }
-    if content.chars().count() > LONG_TEXT_THRESHOLD {
-        return Category { content_type: "text", tag: "Testo lungo" };
+    if original.chars().count() > LONG_TEXT_THRESHOLD {
+        return ("text", "Testo lungo");
     }
-    Category { content_type: "text", tag: "Testo" }
+    ("text", "Testo")
 }
 
-/// Numeri puri, IBAN o carte di credito (13-19 cifre, eventuali spazi/trattini).
+/// Decide se il contenuto va mascherato: email, IBAN, carta, o token/chiave lunga.
+fn is_sensitive(trimmed: &str) -> bool {
+    if EMAIL_RE.is_match(trimmed) {
+        return true;
+    }
+    let compact: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+    if IBAN_RE.is_match(&compact) {
+        return true;
+    }
+    if is_card_number(&compact) {
+        return true;
+    }
+    is_long_token(trimmed)
+}
+
+/// Numeri puri, IBAN o carte: usato per il tag "Numeri" (non implica sensibile).
 fn is_numeric_like(s: &str) -> bool {
     let compact: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     if compact.is_empty() {
@@ -64,17 +90,38 @@ fn is_numeric_like(s: &str) -> bool {
     if IBAN_RE.is_match(&compact) {
         return true;
     }
-    // carta di credito / numero lungo: solo cifre (con eventuali separatori già rimossi)
     let digits: String = compact.chars().filter(|c| *c != '-').collect();
     if digits.chars().all(|c| c.is_ascii_digit()) {
-        let n = digits.len();
-        return (1..=19).contains(&n);
+        return (1..=19).contains(&digits.len());
     }
     false
 }
 
-/// Euristica "sembra codice": presenza di simboli/parole chiave tipiche o
-/// indentazione su più righe.
+/// 13-19 cifre, eventuali separatori '-' (numero tipo carta di credito).
+fn is_card_number(compact: &str) -> bool {
+    if !compact.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return false;
+    }
+    let digits = compact.chars().filter(|c| c.is_ascii_digit()).count();
+    (13..=19).contains(&digits)
+}
+
+/// Token/chiave: nessuno spazio, 20-400 char, mix di lettere e cifre
+/// (es. API key, JWT, hash). Esclude parole singole e percorsi senza cifre.
+fn is_long_token(s: &str) -> bool {
+    if s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let n = s.chars().count();
+    if !(20..=400).contains(&n) {
+        return false;
+    }
+    let has_digit = s.chars().any(|c| c.is_ascii_digit());
+    let has_alpha = s.chars().any(|c| c.is_ascii_alphabetic());
+    has_digit && has_alpha
+}
+
+/// Euristica "sembra codice": simboli/parole chiave tipiche o indentazione.
 fn looks_like_code(s: &str) -> bool {
     if s.is_empty() {
         return false;
@@ -88,7 +135,6 @@ fn looks_like_code(s: &str) -> bool {
     ];
     let has_keyword = keywords.iter().any(|k| s.contains(k));
 
-    // righe multiple con indentazione iniziale (spazi o tab)
     let indented_lines = s
         .lines()
         .filter(|l| l.starts_with("    ") || l.starts_with('\t'))
@@ -105,21 +151,40 @@ mod tests {
     fn url() {
         assert_eq!(categorize("https://example.com/path?q=1").tag, "Link");
         assert_eq!(categorize("  http://a.b  ").content_type, "url");
-        // url in mezzo a testo non è un Link "puro"
+        assert!(!categorize("https://example.com/very/long/path/12345").sensitive); // url mai mascherato
         assert_ne!(categorize("vai su https://x.com adesso").tag, "Link");
     }
 
     #[test]
     fn email() {
-        assert_eq!(categorize("mario.rossi@example.it").tag, "Email");
+        let c = categorize("mario.rossi@example.it");
+        assert_eq!(c.tag, "Email");
+        assert!(c.sensitive);
         assert_ne!(categorize("non una email @ niente").tag, "Email");
     }
 
     #[test]
-    fn numbers() {
-        assert_eq!(categorize("4111 1111 1111 1111").tag, "Numeri"); // carta
-        assert_eq!(categorize("IT60X0542811101000000123456").tag, "Numeri"); // IBAN
+    fn numbers_and_sensitivity() {
+        assert_eq!(categorize("4111 1111 1111 1111").tag, "Numeri");
+        assert!(categorize("4111 1111 1111 1111").sensitive); // carta
+        assert!(categorize("IT60X0542811101000000123456").sensitive); // IBAN
         assert_eq!(categorize("42").tag, "Numeri");
+        assert!(!categorize("42").sensitive); // numero corto: non sensibile
+    }
+
+    #[test]
+    fn long_token_is_sensitive() {
+        assert!(categorize("sk_live_4eC39HqLyjWDarjtT1zdp7dc").sensitive); // API key
+        assert!(!categorize("ciao come stai oggi").sensitive); // testo normale
+        assert!(!categorize("parolasingolasenzacifre").sensitive); // niente cifre
+    }
+
+    #[test]
+    fn bom_is_stripped() {
+        // BOM iniziale (clip.exe / certi editor) non deve rompere la categoria
+        assert_eq!(categorize("\u{feff}https://example.com\r\n").tag, "Link");
+        assert_eq!(categorize("\u{feff}test@example.com").tag, "Email");
+        assert!(!categorize("\u{feff}https://example.com").sensitive);
     }
 
     #[test]
@@ -130,8 +195,9 @@ mod tests {
 
     #[test]
     fn long_and_default() {
-        let long = "lorem ipsum ".repeat(60); // > 500 char, niente simboli codice
+        let long = "lorem ipsum ".repeat(60);
         assert_eq!(categorize(&long).tag, "Testo lungo");
+        assert!(!categorize(&long).sensitive); // testo lungo con spazi: non sensibile
         assert_eq!(categorize("ciao come stai").tag, "Testo");
     }
 }

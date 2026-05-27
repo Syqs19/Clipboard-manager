@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS clips (
     pinned       INTEGER NOT NULL DEFAULT 0,
     pinned_order INTEGER,
     char_count   INTEGER NOT NULL DEFAULT 0,
+    sensitive    INTEGER NOT NULL DEFAULT 0,  -- 1 = mascherare nella UI (IBAN/carte/email/token)
     hash         TEXT NOT NULL UNIQUE
 );
 CREATE TABLE IF NOT EXISTS tags (
@@ -72,6 +73,7 @@ pub struct Clip {
     pub pinned: bool,
     pub pinned_order: Option<i64>,
     pub char_count: i64,
+    pub sensitive: bool,
     pub tags: Vec<String>,
 }
 
@@ -84,6 +86,7 @@ pub struct NewClip {
     pub preview: String,
     pub created_at: i64,
     pub char_count: i64,
+    pub sensitive: bool,
     pub hash: String,
 }
 
@@ -92,7 +95,7 @@ pub struct Db {
 }
 
 const SELECT_COLS: &str =
-    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count";
+    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive";
 
 impl Db {
     pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Self> {
@@ -125,8 +128,8 @@ impl Db {
             return Ok(id);
         }
         conn.execute(
-            "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, sensitive, hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 new.content,
                 new.content_type,
@@ -134,6 +137,7 @@ impl Db {
                 new.preview,
                 new.created_at,
                 new.char_count,
+                new.sensitive as i64,
                 new.hash
             ],
         )?;
@@ -285,6 +289,7 @@ impl Db {
             pinned: row.get::<_, i64>(6)? != 0,
             pinned_order: row.get(7)?,
             char_count: row.get(8)?,
+            sensitive: row.get::<_, i64>(9)? != 0,
             tags: Vec::new(),
         })
     }
@@ -312,6 +317,7 @@ mod tests {
             preview: content.chars().take(80).collect(),
             created_at: ts,
             char_count: content.chars().count() as i64,
+            sensitive: false,
             hash: content_hash(content),
         }
     }
