@@ -1,25 +1,106 @@
 //! Salvataggio/lettura delle immagini della clipboard come PNG.
-//! arboard fornisce/accetta byte RGBA8; qui convertiamo da/verso PNG su disco.
+//!
+//! I file su disco sono **cifrati con AES-256-GCM** (vedi [`crate::crypto`]):
+//! il formato a riposo è `MAGIC || NONCE || CIPHERTEXT(PNG)+TAG`. I path nel DB
+//! restano `<hash>.png` / `<hash>.thumb.png`, ma il contenuto è opaco se aperto
+//! con un visualizzatore PNG.
 
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Cursor};
 use std::path::Path;
 
-/// Salva byte RGBA8 come PNG.
-pub fn save_rgba_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
-    let file = File::create(path).map_err(|e| e.to_string())?;
-    let mut encoder = png::Encoder::new(BufWriter::new(file), width, height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-    writer.write_image_data(rgba).map_err(|e| e.to_string())?;
-    Ok(())
+use crate::crypto::{
+    decrypt_bytes, encrypt_bytes, is_encrypted_blob, MasterKey,
+};
+
+/// Codifica RGBA8 → byte PNG in memoria (nessun I/O).
+fn encode_rgba_to_png_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out: Vec<u8> = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(BufWriter::new(&mut out), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        writer.write_image_data(rgba).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
 }
 
-/// Genera (o sovrascrive) una thumbnail RGBA a `max_side` pixel sul lato lungo,
-/// mantenendo l'aspect ratio. Salva come PNG in `dst`.
-pub fn save_thumbnail(src: &Path, dst: &Path, max_side: u32) -> Result<(), String> {
-    let (w, h, rgba) = load_png_rgba(src)?;
+/// Decodifica byte PNG → (width, height, rgba8). Converte a RGBA se serve.
+fn decode_png_bytes(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
+    let mut reader = png::Decoder::new(BufReader::new(Cursor::new(bytes)))
+        .read_info()
+        .map_err(|e| e.to_string())?;
+    let size = reader
+        .output_buffer_size()
+        .ok_or_else(|| "dimensioni immagine non valide".to_string())?;
+    let mut buf = vec![0; size];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+    let data = &buf[..info.buffer_size()];
+    let px = (info.width as usize) * (info.height as usize);
+
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => data.to_vec(),
+        png::ColorType::Rgb => {
+            let mut out = Vec::with_capacity(px * 4);
+            for c in data.chunks_exact(3) {
+                out.extend_from_slice(&[c[0], c[1], c[2], 255]);
+            }
+            out
+        }
+        png::ColorType::Grayscale => {
+            let mut out = Vec::with_capacity(px * 4);
+            for &g in data {
+                out.extend_from_slice(&[g, g, g, 255]);
+            }
+            out
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut out = Vec::with_capacity(px * 4);
+            for c in data.chunks_exact(2) {
+                out.extend_from_slice(&[c[0], c[0], c[0], c[1]]);
+            }
+            out
+        }
+        png::ColorType::Indexed => return Err("PNG indicizzato non supportato".into()),
+    };
+    Ok((info.width, info.height, rgba))
+}
+
+/// Salva byte RGBA8 come PNG **cifrato** (AES-GCM con `key`).
+pub fn save_rgba_png(
+    path: &Path,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    key: &MasterKey,
+) -> Result<(), String> {
+    let png_bytes = encode_rgba_to_png_bytes(width, height, rgba)?;
+    let blob = encrypt_bytes(key, &png_bytes)?;
+    std::fs::write(path, blob).map_err(|e| e.to_string())
+}
+
+/// Legge un PNG **cifrato** dal disco e ritorna (w, h, rgba8).
+pub fn load_png_rgba(path: &Path, key: &MasterKey) -> Result<(u32, u32, Vec<u8>), String> {
+    let png_bytes = load_png_bytes(path, key)?;
+    decode_png_bytes(&png_bytes)
+}
+
+/// Legge un PNG **cifrato** dal disco e restituisce i byte PNG decifrati
+/// (utile per servirli al frontend via comando Tauri).
+pub fn load_png_bytes(path: &Path, key: &MasterKey) -> Result<Vec<u8>, String> {
+    let blob = std::fs::read(path).map_err(|e| e.to_string())?;
+    decrypt_bytes(key, &blob)
+}
+
+/// Genera una thumbnail RGBA a `max_side` pixel sul lato lungo (mantenendo
+/// l'aspect ratio), salvata come PNG cifrato in `dst`.
+pub fn save_thumbnail(
+    src: &Path,
+    dst: &Path,
+    max_side: u32,
+    key: &MasterKey,
+) -> Result<(), String> {
+    let (w, h, rgba) = load_png_rgba(src, key)?;
     if w == 0 || h == 0 {
         return Err("immagine vuota".into());
     }
@@ -31,7 +112,7 @@ pub fn save_thumbnail(src: &Path, dst: &Path, max_side: u32) -> Result<(), Strin
     } else {
         resize_rgba_bilinear(&rgba, w, h, dw, dh)
     };
-    save_rgba_png(dst, dw, dh, &small)
+    save_rgba_png(dst, dw, dh, &small, key)
 }
 
 /// Resize bilineare RGBA8. Qualità sufficiente per le miniature in lista.
@@ -77,10 +158,30 @@ pub fn thumb_path_for(image_path: &Path) -> std::path::PathBuf {
     parent.join(format!("{stem}.thumb.png"))
 }
 
+/// Migrazione una-tantum: se `path` contiene un PNG in chiaro (no magic header),
+/// lo legge e lo riscrive cifrato. Idempotente: se è già cifrato non tocca nulla.
+pub fn encrypt_in_place_if_needed(path: &Path, key: &MasterKey) -> Result<(), String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    if is_encrypted_blob(&bytes) {
+        return Ok(());
+    }
+    // riconosci che sia un PNG plausibile prima di toccarlo
+    if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
+        return Err("file non riconosciuto come PNG".into());
+    }
+    let blob = encrypt_bytes(key, &bytes)?;
+    std::fs::write(path, blob).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::MasterKey;
     use std::path::PathBuf;
+
+    fn dummy_key() -> MasterKey {
+        MasterKey::from_bytes([7u8; 32])
+    }
 
     fn tmp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("clipmgr-test-{name}"))
@@ -96,23 +197,27 @@ mod tests {
 
     #[test]
     fn save_and_load_png_roundtrip() {
+        let key = dummy_key();
         let path = tmp("roundtrip.png");
         let rgba = solid_rgba(4, 3, [10, 20, 30, 255]);
-        save_rgba_png(&path, 4, 3, &rgba).unwrap();
-        let (w, h, out) = load_png_rgba(&path).unwrap();
+        save_rgba_png(&path, 4, 3, &rgba, &key).unwrap();
+        let (w, h, out) = load_png_rgba(&path, &key).unwrap();
         assert_eq!((w, h), (4, 3));
         assert_eq!(out, rgba);
+        // verifica che su disco sia davvero cifrato (no header PNG visibile)
+        let raw = std::fs::read(&path).unwrap();
+        assert!(crate::crypto::is_encrypted_blob(&raw));
         std::fs::remove_file(&path).ok();
     }
 
     #[test]
     fn thumbnail_keeps_aspect_ratio_and_max_side() {
+        let key = dummy_key();
         let src = tmp("thumb-src.png");
         let dst = tmp("thumb-dst.png");
-        // 400x200 → max_side 100 → 100x50
-        save_rgba_png(&src, 400, 200, &solid_rgba(400, 200, [50, 60, 70, 255])).unwrap();
-        save_thumbnail(&src, &dst, 100).unwrap();
-        let (w, h, _) = load_png_rgba(&dst).unwrap();
+        save_rgba_png(&src, 400, 200, &solid_rgba(400, 200, [50, 60, 70, 255]), &key).unwrap();
+        save_thumbnail(&src, &dst, 100, &key).unwrap();
+        let (w, h, _) = load_png_rgba(&dst, &key).unwrap();
         assert_eq!(w, 100);
         assert_eq!(h, 50);
         std::fs::remove_file(&src).ok();
@@ -121,11 +226,12 @@ mod tests {
 
     #[test]
     fn thumbnail_smaller_than_max_keeps_size() {
+        let key = dummy_key();
         let src = tmp("thumb-small-src.png");
         let dst = tmp("thumb-small-dst.png");
-        save_rgba_png(&src, 50, 30, &solid_rgba(50, 30, [200, 200, 200, 255])).unwrap();
-        save_thumbnail(&src, &dst, 100).unwrap();
-        let (w, h, _) = load_png_rgba(&dst).unwrap();
+        save_rgba_png(&src, 50, 30, &solid_rgba(50, 30, [200, 200, 200, 255]), &key).unwrap();
+        save_thumbnail(&src, &dst, 100, &key).unwrap();
+        let (w, h, _) = load_png_rgba(&dst, &key).unwrap();
         assert_eq!((w, h), (50, 30));
         std::fs::remove_file(&src).ok();
         std::fs::remove_file(&dst).ok();
@@ -140,46 +246,29 @@ mod tests {
             "abcdef.thumb.png"
         );
     }
-}
 
-/// Legge un PNG e ritorna (width, height, rgba8). Converte a RGBA se serve.
-pub fn load_png_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    let mut reader = png::Decoder::new(BufReader::new(file))
-        .read_info()
-        .map_err(|e| e.to_string())?;
-    let size = reader
-        .output_buffer_size()
-        .ok_or_else(|| "dimensioni immagine non valide".to_string())?;
-    let mut buf = vec![0; size];
-    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
-    let data = &buf[..info.buffer_size()];
-    let px = (info.width as usize) * (info.height as usize);
+    #[test]
+    fn migration_encrypts_in_place_then_idempotent() {
+        let key = dummy_key();
+        let path = tmp("migrate.png");
+        // scrivi un PNG in chiaro (formato pre-cifratura)
+        let png_bytes = encode_rgba_to_png_bytes(2, 2, &solid_rgba(2, 2, [1, 2, 3, 255])).unwrap();
+        std::fs::write(&path, &png_bytes).unwrap();
+        assert!(!crate::crypto::is_encrypted_blob(&std::fs::read(&path).unwrap()));
 
-    let rgba = match info.color_type {
-        png::ColorType::Rgba => data.to_vec(),
-        png::ColorType::Rgb => {
-            let mut out = Vec::with_capacity(px * 4);
-            for c in data.chunks_exact(3) {
-                out.extend_from_slice(&[c[0], c[1], c[2], 255]);
-            }
-            out
-        }
-        png::ColorType::Grayscale => {
-            let mut out = Vec::with_capacity(px * 4);
-            for &g in data {
-                out.extend_from_slice(&[g, g, g, 255]);
-            }
-            out
-        }
-        png::ColorType::GrayscaleAlpha => {
-            let mut out = Vec::with_capacity(px * 4);
-            for c in data.chunks_exact(2) {
-                out.extend_from_slice(&[c[0], c[0], c[0], c[1]]);
-            }
-            out
-        }
-        png::ColorType::Indexed => return Err("PNG indicizzato non supportato".into()),
-    };
-    Ok((info.width, info.height, rgba))
+        encrypt_in_place_if_needed(&path, &key).unwrap();
+        let blob = std::fs::read(&path).unwrap();
+        assert!(crate::crypto::is_encrypted_blob(&blob));
+
+        // seconda chiamata: nessun cambio (idempotente)
+        encrypt_in_place_if_needed(&path, &key).unwrap();
+        let blob2 = std::fs::read(&path).unwrap();
+        assert_eq!(blob, blob2);
+
+        // e si rilegge correttamente
+        let (w, h, rgba) = load_png_rgba(&path, &key).unwrap();
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(rgba, solid_rgba(2, 2, [1, 2, 3, 255]));
+        std::fs::remove_file(&path).ok();
+    }
 }

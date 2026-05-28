@@ -225,7 +225,7 @@ export function Sidebar({
           active={sameFilter(filter, { kind: "all" })}
           onClick={() => onSelect({ kind: "all" })}
           icon={<Clock className="h-4 w-4" />}
-          label="Cronologia"
+          label="Testo"
           count={totalCount}
         />
       </nav>

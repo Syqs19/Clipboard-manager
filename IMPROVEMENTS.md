@@ -15,7 +15,13 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ## 🔒 Hardening privacy
 
-- ☐ **Cifratura a riposo** dei clip sensibili (o intero DB con SQLCipher) — ora in chiaro nel file SQLite.
+- ✅ **Cifratura a riposo** — SQLCipher (DB intero) + AES-256-GCM per i PNG.
+  Chiave master generata al primo avvio (32 byte) e custodita in `key.bin`
+  cifrato via Windows DPAPI (scope utente). Migrazione automatica dal vecchio
+  DB in chiaro (backup in `clips.plain.bak`) e dai PNG in chiaro al primo
+  avvio. Le immagini sono servite al frontend via comando dedicato
+  `read_image_bytes` + Blob/ObjectURL invece di `asset://`. Tradeoff visibile:
+  rimosso "Apri posizione" per le immagini (i PNG su disco sono opachi).
 - ✅ **Auto-cancellazione** dei clip sensibili: toggle "Non salvarli mai" + TTL in minuti
   (sweep ogni 60s, non tocca le clip fissate). Inoltre, se il toggle è on e si ricopia
   un sensibile già in cronologia, viene rimosso anche quello.
@@ -101,5 +107,4 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ### Prossimi candidati (non ancora fatti)
 - Polish & motion (pass animazioni dedicato)
-- Cifratura DB (SQLCipher)
 - README + onboarding al primo avvio

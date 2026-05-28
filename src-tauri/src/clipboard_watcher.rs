@@ -5,6 +5,7 @@
 //! nuovo contenuto viene categorizzato e scritto subito nel DB (in WAL), così un
 //! crash non perde nulla. Gestisce testo/URL e immagini (salvate come PNG).
 
+use crate::crypto::MasterKey;
 use crate::db::{self, Db, NewClip};
 use crate::{categorizer, images, win_clipboard};
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
@@ -18,6 +19,7 @@ use tauri::{AppHandle, Emitter};
 struct Handler {
     app: AppHandle,
     db: Arc<Db>,
+    key: Arc<MasterKey>,
     paused: Arc<AtomicBool>,
     max_history: Arc<AtomicI64>,
     dont_save_sensitive: Arc<AtomicBool>,
@@ -167,12 +169,18 @@ impl Handler {
 
         let path = self.images_dir.join(format!("{hash}.png"));
         if !path.exists() {
-            images::save_rgba_png(&path, img.width as u32, img.height as u32, &img.bytes)?;
+            images::save_rgba_png(
+                &path,
+                img.width as u32,
+                img.height as u32,
+                &img.bytes,
+                &self.key,
+            )?;
         }
         // genera la thumbnail (200px lato lungo) se manca
         let thumb = images::thumb_path_for(&path);
         if !thumb.exists() {
-            let _ = images::save_thumbnail(&path, &thumb, 200);
+            let _ = images::save_thumbnail(&path, &thumb, 200, &self.key);
         }
         let new = NewClip {
             content: None,
@@ -204,6 +212,7 @@ impl Handler {
 pub fn start(
     app: AppHandle,
     db: Arc<Db>,
+    key: Arc<MasterKey>,
     paused: Arc<AtomicBool>,
     max_history: Arc<AtomicI64>,
     dont_save_sensitive: Arc<AtomicBool>,
@@ -221,6 +230,7 @@ pub fn start(
         let handler = Handler {
             app,
             db,
+            key,
             paused,
             max_history,
             dont_save_sensitive,

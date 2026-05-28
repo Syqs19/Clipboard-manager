@@ -13,6 +13,8 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::crypto::MasterKey;
+
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS clips (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,6 +72,64 @@ pub fn content_hash(s: &str) -> String {
     bytes_hash(s.as_bytes())
 }
 
+/// Vero se `path` punta a un DB SQLite **in chiaro** (header standard
+/// `"SQLite format 3\0"`). Per SQLCipher l'header è cifrato → ritorna false.
+fn is_plaintext_sqlite(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let mut header = [0u8; 16];
+    if f.read_exact(&mut header).is_err() {
+        return false;
+    }
+    &header == b"SQLite format 3\0"
+}
+
+/// Migra un DB SQLite in chiaro a SQLCipher copiando le tabelle via
+/// `sqlcipher_export`. Lascia un backup `<path>.plain.bak`.
+fn migrate_plaintext_to_encrypted(path: &Path, key: &MasterKey) -> rusqlite::Result<()> {
+    let new_path = path.with_extension("db.new");
+    let _ = std::fs::remove_file(&new_path);
+
+    let plain = Connection::open(path)?;
+    let escaped_path = new_path.to_string_lossy().replace('\'', "''");
+    let sql = format!(
+        "ATTACH DATABASE '{escaped_path}' AS encrypted KEY \"x'{hex}'\";
+         SELECT sqlcipher_export('encrypted');
+         DETACH DATABASE encrypted;",
+        hex = key.to_hex()
+    );
+    plain.execute_batch(&sql)?;
+    drop(plain);
+
+    let bak = path.with_extension("plain.bak");
+    let _ = std::fs::remove_file(&bak);
+    std::fs::rename(path, &bak).map_err(io_to_rusqlite)?;
+    std::fs::rename(&new_path, path).map_err(io_to_rusqlite)?;
+
+    // i file -wal/-shm del DB in chiaro non sono più validi
+    let wal = path.with_extension("db-wal");
+    let shm = path.with_extension("db-shm");
+    let _ = std::fs::remove_file(&wal);
+    let _ = std::fs::remove_file(&shm);
+    Ok(())
+}
+
+/// Apre una connessione SQLCipher con la chiave master applicata.
+fn open_encrypted_connection(path: &Path, key: &MasterKey) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key.to_hex()))?;
+    // tocca lo schema: se la chiave è sbagliata, fallisce qui
+    let _: i64 = conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))?;
+    Ok(conn)
+}
+
+fn io_to_rusqlite(e: std::io::Error) -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+        Some(e.to_string()),
+    )
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Clip {
     pub id: i64,
@@ -113,11 +173,19 @@ const SELECT_COLS: &str =
     "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash, content_html, content_rtf";
 
 impl Db {
-    pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Self> {
-        let conn = Connection::open(path)?;
+    /// Apre il DB cifrato con SQLCipher. Se trova un DB pre-esistente in
+    /// chiaro nella stessa path, lo migra in-place al formato cifrato
+    /// (backup del vecchio in `<path>.plain.bak`).
+    pub fn open<P: AsRef<Path>>(path: P, key: &MasterKey) -> rusqlite::Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        if path.exists() && is_plaintext_sqlite(&path) {
+            migrate_plaintext_to_encrypted(&path, key)?;
+        }
+        let conn = open_encrypted_connection(&path, key)?;
         Self::init(conn)
     }
 
+    /// DB in-memory (usato solo dai test, non cifrato).
     pub fn open_in_memory() -> rusqlite::Result<Self> {
         Self::init(Connection::open_in_memory()?)
     }

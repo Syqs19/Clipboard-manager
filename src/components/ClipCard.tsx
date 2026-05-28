@@ -15,10 +15,10 @@ import {
   Type,
   X,
 } from "lucide-react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
 import { maskSensitive, relativeTime, splitMatches } from "../lib/format";
+import { useImageUrl } from "../lib/useImageUrl";
 
 function IconButton({
   title,
@@ -106,6 +106,10 @@ export function ClipCard({
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
   const isFiles = clip.content_type === "files";
+  // i PNG su disco sono cifrati: il backend li decifra e li serve come blob
+  const thumbUrl = useImageUrl(
+    isImage ? clip.thumb_path ?? clip.image_path : null,
+  );
   const hasHtml = !!clip.content_html && !isImage && !isFiles;
   const hasRtf = !!clip.content_rtf && !isImage && !isFiles;
   const hasRich = hasHtml || hasRtf;
@@ -207,12 +211,18 @@ export function ClipCard({
           </div>
         </div>
       ) : isImage ? (
-        <img
-          src={convertFileSrc(clip.thumb_path ?? clip.image_path!)}
-          alt={clip.preview}
-          draggable={false}
-          className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
-        />
+        thumbUrl ? (
+          <img
+            src={thumbUrl}
+            alt={clip.preview}
+            draggable={false}
+            className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
+          />
+        ) : (
+          <div className="flex h-24 items-center justify-center rounded border border-dashed border-zinc-700 text-xs text-zinc-500">
+            {clip.preview}
+          </div>
+        )
       ) : isFiles ? (
         <div className="flex flex-col gap-1">
           {filePaths.slice(0, 4).map((p) => {
@@ -378,15 +388,13 @@ export function ClipCard({
               <Pencil className="h-4 w-4" />
             </IconButton>
           )}
-          {(isImage || isFiles) && onReveal && (
+          {/* "Apri posizione" disponibile solo per i file copiati dall'Explorer:
+              i PNG delle immagini sono cifrati su disco, mostrarli in Esplora
+              non avrebbe senso */}
+          {isFiles && onReveal && filePaths[0] && (
             <IconButton
               title="Apri posizione"
-              onClick={() => {
-                const target = isImage
-                  ? clip.image_path
-                  : filePaths[0];
-                if (target) onReveal(target);
-              }}
+              onClick={() => onReveal(filePaths[0])}
             >
               <FolderOpen className="h-4 w-4" />
             </IconButton>

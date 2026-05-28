@@ -12,8 +12,10 @@ pub fn should_skip() -> bool {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::System::DataExchange::{
-        CloseClipboard, EnumClipboardFormats, OpenClipboard, RegisterClipboardFormatW,
+        CloseClipboard, EnumClipboardFormats, GetClipboardData, OpenClipboard,
+        RegisterClipboardFormatW,
     };
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
 
     fn wide(s: &str) -> Vec<u16> {
         OsStr::new(s)
@@ -36,21 +38,39 @@ pub fn should_skip() -> bool {
             return false;
         }
         let mut fmt: u32 = 0;
-        let mut found = false;
+        let mut has_exclude = false;
+        let mut has_can_history = false;
         loop {
             fmt = EnumClipboardFormats(fmt);
             if fmt == 0 {
                 break;
             }
-            if (cf_exclude != 0 && fmt == cf_exclude)
-                || (cf_can_history != 0 && fmt == cf_can_history)
-            {
-                found = true;
-                break;
+            if cf_exclude != 0 && fmt == cf_exclude {
+                has_exclude = true;
+            }
+            if cf_can_history != 0 && fmt == cf_can_history {
+                has_can_history = true;
+            }
+        }
+        // ExcludeClipboardContentFromMonitorProcessing: presenza = skip.
+        // CanIncludeInClipboardHistory: DWORD; valore 0 = skip, valore 1 = OK.
+        // (Microsoft: il flag è "puoi storicizzare?", non "è privato")
+        let mut skip = has_exclude;
+        if !skip && has_can_history {
+            let h = GetClipboardData(cf_can_history) as *mut core::ffi::c_void;
+            if !h.is_null() {
+                let p = GlobalLock(h) as *const u32;
+                if !p.is_null() {
+                    let v = *p;
+                    GlobalUnlock(h);
+                    if v == 0 {
+                        skip = true;
+                    }
+                }
             }
         }
         CloseClipboard();
-        found
+        skip
     }
 }
 

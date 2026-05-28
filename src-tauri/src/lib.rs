@@ -1,6 +1,7 @@
 mod categorizer;
 mod clipboard_watcher;
 mod commands;
+mod crypto;
 mod db;
 mod images;
 mod settings;
@@ -45,8 +46,18 @@ pub fn run() {
             // DB nella cartella dati dell'app (es. %APPDATA%\com.matte.clipboardmanager)
             let data_dir = app.path().app_data_dir().expect("app data dir non disponibile");
             std::fs::create_dir_all(&data_dir).ok();
-            let database =
-                Arc::new(db::Db::open(data_dir.join("clips.db")).expect("apertura DB fallita"));
+
+            // chiave master per SQLCipher + PNG cifrati: persistita in key.bin
+            // (cifrata via Windows DPAPI scope utente). Generata al primo avvio.
+            let master_key = Arc::new(
+                crypto::load_or_create_master_key(&data_dir.join("key.bin"))
+                    .expect("impossibile inizializzare la chiave master"),
+            );
+
+            let database = Arc::new(
+                db::Db::open(data_dir.join("clips.db"), &master_key)
+                    .expect("apertura DB fallita"),
+            );
 
             // cartella immagini + pulizia dei PNG orfani (non più referenziati dal DB)
             let images_dir = data_dir.join("images");
@@ -148,11 +159,30 @@ pub fn run() {
             let kinds_for_sweep = runtime.sensitive_kinds.clone();
 
             app.manage(database.clone());
+            app.manage(master_key.clone());
             app.manage(runtime);
 
             // backfill di sensitive_kind sulle clip pre-esistenti (idempotente)
             if let Err(e) = database.backfill_sensitive_kinds() {
                 eprintln!("[backfill] errore: {e}");
+            }
+
+            // migrazione una-tantum: cifra in place i PNG salvati con la
+            // versione precedente (idempotente: i file già cifrati si saltano)
+            if let Ok(entries) = std::fs::read_dir(&images_dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    let is_png = p
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .is_some_and(|n| n.ends_with(".png"));
+                    if !is_png {
+                        continue;
+                    }
+                    if let Err(e) = images::encrypt_in_place_if_needed(&p, &master_key) {
+                        eprintln!("[migrate-png] {}: {e}", p.display());
+                    }
+                }
             }
 
             // backfill thumbnail per PNG esistenti senza .thumb.png (idempotente)
@@ -167,7 +197,7 @@ pub fn run() {
                     }
                     let thumb = images::thumb_path_for(&p);
                     if !thumb.exists() {
-                        let _ = images::save_thumbnail(&p, &thumb, 200);
+                        let _ = images::save_thumbnail(&p, &thumb, 200, &master_key);
                     }
                 }
             }
@@ -176,6 +206,7 @@ pub fn run() {
             clipboard_watcher::start(
                 app.handle().clone(),
                 database.clone(),
+                master_key.clone(),
                 paused,
                 max_hist,
                 dont_save,
@@ -256,6 +287,7 @@ pub fn run() {
             commands::rename_tag,
             commands::bulk_remove_tag,
             commands::reveal_in_explorer,
+            commands::read_image_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

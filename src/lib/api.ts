@@ -67,6 +67,9 @@ export const api = {
     invoke<number>("export_history", { path }),
   importHistory: (path: string, mode: "merge" | "replace") =>
     invoke<number>("import_history", { path, mode }),
+  /// Legge un PNG cifrato dal disco e restituisce i byte decifrati come ArrayBuffer.
+  readImageBytes: (path: string) =>
+    invoke<ArrayBuffer>("read_image_bytes", { path }),
 };
 
 export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;

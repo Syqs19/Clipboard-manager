@@ -4,6 +4,7 @@
 //! DB (non quello mascherato mostrato nella UI), così i dati sensibili restano
 //! copiabili pur essendo nascosti a schermo.
 
+use crate::crypto::MasterKey;
 use crate::db::{Clip, Db, NewClip};
 use crate::settings::RuntimeState;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -12,10 +13,12 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 type Database = Arc<Db>;
+type Key = Arc<MasterKey>;
 
 const DEFAULT_LIMIT: i64 = 200;
 
@@ -37,7 +40,7 @@ pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, Str
 /// (testo intero per i sensibili, immagine ricostruita dal PNG per le immagini).
 /// Se `as_plain` è true, una clip con HTML viene copiata SOLO come testo (utile per
 /// "Incolla come testo semplice").
-fn write_clip_to_clipboard(db: &Db, id: i64, as_plain: bool) -> Result<(), String> {
+fn write_clip_to_clipboard(db: &Db, key: &MasterKey, id: i64, as_plain: bool) -> Result<(), String> {
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
@@ -46,7 +49,8 @@ fn write_clip_to_clipboard(db: &Db, id: i64, as_plain: bool) -> Result<(), Strin
 
     if clip.content_type == "image" {
         if let Some(path) = clip.image_path {
-            let (w, h, rgba) = crate::images::load_png_rgba(std::path::Path::new(&path))?;
+            let (w, h, rgba) =
+                crate::images::load_png_rgba(std::path::Path::new(&path), key)?;
             cb.set_image(arboard::ImageData {
                 width: w as usize,
                 height: h as usize,
@@ -83,8 +87,23 @@ fn write_clip_to_clipboard(db: &Db, id: i64, as_plain: bool) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn copy_clip(db: State<Database>, id: i64, as_plain: Option<bool>) -> Result<(), String> {
-    write_clip_to_clipboard(db.inner(), id, as_plain.unwrap_or(false))
+pub fn copy_clip(
+    db: State<Database>,
+    key: State<Key>,
+    id: i64,
+    as_plain: Option<bool>,
+) -> Result<(), String> {
+    write_clip_to_clipboard(db.inner(), key.inner(), id, as_plain.unwrap_or(false))
+}
+
+/// Restituisce i byte PNG (decifrati) di un'immagine salvata su disco, così
+/// il frontend può costruire un Blob/ObjectURL senza passare dal protocollo
+/// `asset://` (che vedrebbe solo blob cifrati opachi).
+#[tauri::command]
+pub fn read_image_bytes(key: State<Key>, path: String) -> Result<Response, String> {
+    let bytes =
+        crate::images::load_png_bytes(std::path::Path::new(&path), key.inner())?;
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
@@ -178,6 +197,7 @@ struct ExportClip {
 pub fn export_history(
     app: AppHandle,
     db: State<Database>,
+    key: State<Key>,
     path: String,
 ) -> Result<usize, String> {
     let clips = db.list_recent(i64::MAX).map_err(|e| e.to_string())?;
@@ -187,7 +207,9 @@ pub fn export_history(
     for c in &clips {
         let (image_filename, image_b64) = match &c.image_path {
             Some(p) => {
-                let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+                // export: salva il PNG **in chiaro** (decifrato) così il file
+                // JSON è portabile su altre macchine / nuove installazioni
+                let bytes = crate::images::load_png_bytes(Path::new(p), key.inner())?;
                 let fname = Path::new(p)
                     .file_name()
                     .map(|s| s.to_string_lossy().to_string());
@@ -234,6 +256,7 @@ pub fn export_history(
 pub fn import_history(
     app: AppHandle,
     db: State<Database>,
+    key: State<Key>,
     path: String,
     mode: String,
 ) -> Result<usize, String> {
@@ -284,12 +307,14 @@ pub fn import_history(
             continue;
         }
 
-        // ricostruisci eventuale immagine da base64
+        // ricostruisci eventuale immagine da base64 (i byte JSON sono PNG in
+        // chiaro: vanno cifrati prima di toccare il disco)
         let image_path = match (c.image_b64.as_deref(), c.image_filename.as_deref()) {
             (Some(b64), Some(fname)) => {
-                let bytes = B64.decode(b64).map_err(|e| e.to_string())?;
+                let png_bytes = B64.decode(b64).map_err(|e| e.to_string())?;
+                let blob = crate::crypto::encrypt_bytes(key.inner(), &png_bytes)?;
                 let dest = images_dir.join(fname);
-                std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+                std::fs::write(&dest, &blob).map_err(|e| e.to_string())?;
                 Some(dest.to_string_lossy().to_string())
             }
             _ => None,
