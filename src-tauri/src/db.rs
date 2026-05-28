@@ -241,6 +241,35 @@ impl Db {
         Ok(())
     }
 
+    /// Restituisce i path delle immagini associate alle clip indicate (per la pulizia
+    /// dei file prima della cancellazione).
+    pub fn image_paths_for(&self, ids: &[i64]) -> rusqlite::Result<Vec<String>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let placeholders = std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT image_path FROM clips WHERE id IN ({placeholders}) AND image_path IS NOT NULL"
+        );
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&sql)?;
+        let params = rusqlite::params_from_iter(ids.iter());
+        let rows = stmt.query_map(params, |r| r.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    /// Cancella le clip con gli id indicati. Ritorna quante ne sono state rimosse.
+    pub fn delete_clips(&self, ids: &[i64]) -> rusqlite::Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(",");
+        let sql = format!("DELETE FROM clips WHERE id IN ({placeholders})");
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(&sql, rusqlite::params_from_iter(ids.iter()))?;
+        Ok(n)
+    }
+
     /// Tiene solo le `limit` clip non-pinnate più recenti; elimina le altre
     /// non-pinnate. I pinned non vengono mai eliminati. Ritorna quante ne ha tolte.
     pub fn prune_to_limit(&self, limit: i64) -> rusqlite::Result<usize> {

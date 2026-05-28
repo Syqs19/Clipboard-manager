@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  CheckCircle2,
+  Circle,
   Copy,
   Eye,
   EyeOff,
@@ -11,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { type Clip } from "../lib/api";
+import { type Clip, type SelectModifier } from "../lib/api";
 import { maskSensitive, relativeTime } from "../lib/format";
 
 function IconButton({
@@ -45,6 +47,7 @@ export function ClipCard({
   clip,
   selected,
   copied,
+  selectedForBulk,
   onSelect,
   colorOf,
   onCopy,
@@ -55,10 +58,14 @@ export function ClipCard({
   onAddTag,
   onRemoveTag,
   onSetTagColor,
+  onBulkClick,
+  selectModifier,
+  selectionMode,
 }: {
   clip: Clip;
   selected: boolean;
   copied: boolean;
+  selectedForBulk?: boolean;
   onSelect: () => void;
   colorOf: (name: string) => string;
   onCopy: (id: number) => void;
@@ -69,6 +76,9 @@ export function ClipCard({
   onAddTag: (id: number, name: string) => void;
   onRemoveTag: (id: number, name: string) => void;
   onSetTagColor: (name: string, color: string) => void;
+  onBulkClick?: (e: React.MouseEvent) => void;
+  selectModifier?: SelectModifier;
+  selectionMode?: boolean;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -101,8 +111,24 @@ export function ClipCard({
     setEditing(false);
   };
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
     if (editing) return;
+    // in modalità selezione: qualsiasi click toggla la selezione (no copia/preview)
+    if (selectionMode) {
+      onBulkClick?.(e);
+      return;
+    }
+    // fuori dalla modalità selezione: il modifier scelto attiva il bulk;
+    // Shift+click resta sempre attivo per l'estensione del range.
+    const mod = selectModifier ?? "ctrl";
+    const bulkHit =
+      e.shiftKey ||
+      (mod === "ctrl" && (e.ctrlKey || e.metaKey)) ||
+      (mod === "alt" && e.altKey);
+    if (bulkHit) {
+      onBulkClick?.(e);
+      return;
+    }
     onSelect(); // sincronizza la selezione da tastiera col click
     if (isImage) onPreview(clip);
     else onCopy(clip.id);
@@ -115,11 +141,13 @@ export function ClipCard({
       className={`group relative rounded-lg border bg-zinc-800/30 p-3 transition-all ${
         editing ? "" : "cursor-pointer hover:bg-zinc-800/60"
       } ${
-        copied
-          ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
-          : selected
-            ? "border-zinc-600 ring-1 ring-zinc-500/50"
-            : "border-zinc-800 hover:border-zinc-700"
+        selectedForBulk
+          ? "border-emerald-500/70 bg-emerald-500/5 ring-1 ring-emerald-500/40"
+          : copied
+            ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
+            : selected
+              ? "border-zinc-600 ring-1 ring-zinc-500/50"
+              : "border-zinc-800 hover:border-zinc-700"
       }`}
     >
       {editing ? (
@@ -246,8 +274,19 @@ export function ClipCard({
         </div>
       )}
 
-      {/* azioni in hover */}
-      {!editing && (
+      {/* checkbox in modalità selezione */}
+      {selectionMode && !editing && (
+        <div className="absolute right-2 top-2 text-emerald-400">
+          {selectedForBulk ? (
+            <CheckCircle2 className="h-5 w-5 fill-emerald-500/20" />
+          ) : (
+            <Circle className="h-5 w-5 text-zinc-500" />
+          )}
+        </div>
+      )}
+
+      {/* azioni in hover (nascoste durante la modalità selezione) */}
+      {!editing && !selectionMode && (
         <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-zinc-900/90 p-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
           {clip.sensitive && (
             <IconButton

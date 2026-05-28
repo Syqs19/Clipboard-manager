@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ClipboardList } from "lucide-react";
-import { type Clip } from "../lib/api";
+import { type Clip, type SelectModifier } from "../lib/api";
 import { ClipCard } from "./ClipCard";
 
 /// Etichetta del gruppo a cui appartiene una clip in base a pin/data.
@@ -36,6 +36,10 @@ export function ClipList({
   onRemoveTag,
   onSetTagColor,
   onReorderPinned,
+  selectedIds,
+  onBulkClick,
+  selectModifier,
+  selectionMode,
 }: {
   clips: Clip[];
   selectedIndex: number;
@@ -51,6 +55,10 @@ export function ClipList({
   onRemoveTag: (id: number, name: string) => void;
   onSetTagColor: (name: string, color: string) => void;
   onReorderPinned: (ids: number[]) => void;
+  selectedIds: Set<number>;
+  onBulkClick: (clipIndex: number, e: React.MouseEvent) => void;
+  selectModifier: SelectModifier;
+  selectionMode: boolean;
 }) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -169,6 +177,7 @@ export function ClipList({
                 clip={clip}
                 selected={i === selectedIndex}
                 copied={clip.id === copiedId}
+                selectedForBulk={selectedIds.has(clip.id)}
                 onSelect={() => onSelect(i)}
                 colorOf={colorOf}
                 onCopy={onCopy}
@@ -179,6 +188,9 @@ export function ClipList({
                 onAddTag={onAddTag}
                 onRemoveTag={onRemoveTag}
                 onSetTagColor={onSetTagColor}
+                onBulkClick={(e) => onBulkClick(i, e)}
+                selectModifier={selectModifier}
+                selectionMode={selectionMode}
               />
             </div>
           </div>

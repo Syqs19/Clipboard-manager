@@ -221,6 +221,9 @@ pub fn run() {
             commands::apply_sensitive_ttl,
             commands::apply_sensitive_kinds,
             commands::reorder_pinned,
+            commands::remove_clips,
+            commands::bulk_set_pinned,
+            commands::bulk_add_tag,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -24,6 +24,11 @@ export const api = {
     invoke<void>("toggle_pin", { id, pinned }),
   reorderPinned: (ids: number[]) => invoke<void>("reorder_pinned", { ids }),
   removeClip: (id: number) => invoke<void>("remove_clip", { id }),
+  removeClips: (ids: number[]) => invoke<void>("remove_clips", { ids }),
+  bulkSetPinned: (ids: number[], pinned: boolean) =>
+    invoke<void>("bulk_set_pinned", { ids, pinned }),
+  bulkAddTag: (ids: number[], name: string) =>
+    invoke<void>("bulk_add_tag", { ids, name }),
   clearHistory: () => invoke<void>("clear_history"),
   listTags: () => invoke<[string, number, string | null][]>("list_tags"),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
@@ -48,6 +53,11 @@ export const api = {
 
 export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;
 export type SensitiveKind = (typeof SENSITIVE_KINDS)[number];
+
+/// Tasto modificatore per attivare la multi-selezione con click sulle clip.
+/// Shift è riservato all'estensione del range (sempre attivo).
+export const SELECT_MODIFIERS = ["ctrl", "alt"] as const;
+export type SelectModifier = (typeof SELECT_MODIFIERS)[number];
 
 /// Evento emesso dal menu tray "Impostazioni".
 export function onOpenSettings(cb: () => void): Promise<UnlistenFn> {

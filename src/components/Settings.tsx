@@ -2,7 +2,18 @@ import { useEffect, useState } from "react";
 import { X, Trash2, Keyboard } from "lucide-react";
 import { Store } from "@tauri-apps/plugin-store";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { api, SENSITIVE_KINDS, type SensitiveKind } from "../lib/api";
+import {
+  api,
+  SELECT_MODIFIERS,
+  SENSITIVE_KINDS,
+  type SelectModifier,
+  type SensitiveKind,
+} from "../lib/api";
+
+const MODIFIER_LABELS: Record<SelectModifier, string> = {
+  ctrl: "Ctrl",
+  alt: "Alt",
+};
 
 const KIND_LABELS: Record<SensitiveKind, string> = {
   email: "Email",
@@ -74,10 +85,12 @@ export function Settings({
   open,
   onClose,
   onReload,
+  onSelectModifierChange,
 }: {
   open: boolean;
   onClose: () => void;
   onReload: () => void;
+  onSelectModifierChange?: (m: SelectModifier) => void;
 }) {
   const [autostart, setAutostart] = useState(false);
   const [startHidden, setStartHidden] = useState(false);
@@ -92,6 +105,7 @@ export function Settings({
   const [sensitiveKinds, setSensitiveKinds] = useState<SensitiveKind[]>([
     ...SENSITIVE_KINDS,
   ]);
+  const [selectMod, setSelectMod] = useState<SelectModifier>("ctrl");
   const [tab, setTab] = useState<"general" | "security" | "reset">("general");
 
   // carica le impostazioni quando si apre
@@ -113,6 +127,10 @@ export function Settings({
           (SENSITIVE_KINDS as readonly string[]).includes(k),
         ),
       );
+      const m = (await store.get<string>("multiSelectModifier")) ?? "ctrl";
+      if ((SELECT_MODIFIERS as readonly string[]).includes(m)) {
+        setSelectMod(m as SelectModifier);
+      }
       setAutostart(await isEnabled());
       setConfirmClear(false);
       setHotkeyError("");
@@ -186,6 +204,11 @@ export function Settings({
     setSensitiveTtl(v);
     await save("sensitiveTtlMinutes", v);
     await api.applySensitiveTtl(v);
+  };
+  const onSelectMod = async (m: SelectModifier) => {
+    setSelectMod(m);
+    await save("multiSelectModifier", m);
+    onSelectModifierChange?.(m);
   };
   const onToggleKind = async (kind: SensitiveKind, checked: boolean) => {
     const next = checked
@@ -296,6 +319,23 @@ export function Settings({
               {hotkeyError && (
                 <div className="py-2 text-xs text-red-400">{hotkeyError}</div>
               )}
+
+              <Row
+                title="Tasto per selezione multipla"
+                hint="+ click sulle clip. Shift+click estende sempre il range."
+              >
+                <select
+                  value={selectMod}
+                  onChange={(e) => onSelectMod(e.target.value as SelectModifier)}
+                  className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                >
+                  {SELECT_MODIFIERS.map((m) => (
+                    <option key={m} value={m}>
+                      {MODIFIER_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </Row>
             </>
           )}
 

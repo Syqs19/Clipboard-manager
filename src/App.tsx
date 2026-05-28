@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, onClipsChanged, onOpenSettings, type Clip } from "./lib/api";
+import {
+  api,
+  onClipsChanged,
+  onOpenSettings,
+  SELECT_MODIFIERS,
+  type Clip,
+  type SelectModifier,
+} from "./lib/api";
+import { Store } from "@tauri-apps/plugin-store";
 import { tagColor } from "./lib/format";
 import { Sidebar, type Filter } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
 import { Settings } from "./components/Settings";
 import { ImagePreview } from "./components/ImagePreview";
+import { SelectionBar } from "./components/SelectionBar";
 
 function App() {
   const [clips, setClips] = useState<Clip[]>([]);
@@ -17,9 +26,19 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectModifier, setSelectModifier] = useState<SelectModifier>("ctrl");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const lastBulkIndexRef = useRef<number | null>(null);
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
   const visibleRef = useRef<Clip[]>([]);
   const selRef = useRef(0);
   const modalRef = useRef(false);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    lastBulkIndexRef.current = null;
+  }, []);
 
   // feedback "Copiato": id della clip appena copiata/risalita (lampeggia ~900ms)
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -45,17 +64,29 @@ function App() {
     reload();
   }, [reload]);
 
-  // ESC: chiude prima i modal aperti, altrimenti nasconde la finestra
+  // legge il modifier per la multi-selezione (default Ctrl)
+  useEffect(() => {
+    (async () => {
+      const store = await Store.load("settings.json");
+      const m = await store.get<string>("multiSelectModifier");
+      if (m && (SELECT_MODIFIERS as readonly string[]).includes(m)) {
+        setSelectModifier(m as SelectModifier);
+      }
+    })();
+  }, []);
+
+  // ESC: chiude prima i modal aperti, poi la selezione bulk, altrimenti nasconde la finestra
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (previewClip) setPreviewClip(null);
       else if (settingsOpen) setSettingsOpen(false);
+      else if (selectedIdsRef.current.size > 0) clearSelection();
       else getCurrentWindow().hide();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewClip, settingsOpen]);
+  }, [previewClip, settingsOpen, clearSelection]);
 
   // si sottoscrive una sola volta agli eventi del watcher
   const reloadRef = useRef(reload);
@@ -108,6 +139,12 @@ function App() {
           api.copyClip(c.id);
           flashRef.current(c.id);
         }
+      } else if (e.key === "Delete" && !typing) {
+        // Del con selezione bulk attiva → elimina tutte le selezionate
+        if (selectedIdsRef.current.size > 0) {
+          e.preventDefault();
+          deleteSelectedRef.current();
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -157,6 +194,57 @@ function App() {
     reload();
   };
 
+  // multi-selezione: Ctrl/Cmd+click toggle, Shift+click range
+  const onCardBulkClick = (clipIndex: number, e: React.MouseEvent) => {
+    const list = visibleRef.current;
+    const clip = list[clipIndex];
+    if (!clip) return;
+    if (e.shiftKey && lastBulkIndexRef.current != null) {
+      const start = Math.min(lastBulkIndexRef.current, clipIndex);
+      const end = Math.max(lastBulkIndexRef.current, clipIndex);
+      const next = new Set(selectedIdsRef.current);
+      for (let i = start; i <= end; i++) {
+        if (list[i]) next.add(list[i].id);
+      }
+      setSelectedIds(next);
+    } else {
+      const next = new Set(selectedIdsRef.current);
+      if (next.has(clip.id)) next.delete(clip.id);
+      else next.add(clip.id);
+      setSelectedIds(next);
+    }
+    lastBulkIndexRef.current = clipIndex;
+  };
+
+  const deleteSelected = async () => {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    await api.removeClips(ids);
+    clearSelection();
+    reload();
+  };
+  const deleteSelectedRef = useRef(deleteSelected);
+  deleteSelectedRef.current = deleteSelected;
+
+  const togglePinSelected = async (pin: boolean) => {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    await api.bulkSetPinned(ids, pin);
+    reload();
+  };
+
+  const addTagSelected = async (name: string) => {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    await api.bulkAddTag(ids, name);
+    reload();
+  };
+
+  // stato pinned aggregato della selezione (per il bottone Pinna/Despinna)
+  const selectedClips = clips.filter((c) => selectedIds.has(c.id));
+  const anyPinned = selectedClips.some((c) => c.pinned);
+  const allPinned = selectedClips.length > 0 && selectedClips.every((c) => c.pinned);
+
   // colore di un tag: override salvato oppure deterministico dal nome
   const colorOf = (name: string) =>
     tagColor(name, tags.find((t) => t[0] === name)?.[2] ?? null);
@@ -188,6 +276,17 @@ function App() {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {selectedIds.size > 0 && (
+            <SelectionBar
+              count={selectedIds.size}
+              anyPinned={anyPinned}
+              allPinned={allPinned}
+              onClear={clearSelection}
+              onDelete={deleteSelected}
+              onTogglePin={togglePinSelected}
+              onAddTag={addTagSelected}
+            />
+          )}
           <ClipList
             clips={visible}
             selectedIndex={sel}
@@ -206,6 +305,10 @@ function App() {
               await api.reorderPinned(ids);
               await reload();
             }}
+            selectedIds={selectedIds}
+            onBulkClick={onCardBulkClick}
+            selectModifier={selectModifier}
+            selectionMode={selectedIds.size > 0}
           />
         </div>
       </main>
@@ -214,6 +317,7 @@ function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onReload={reload}
+        onSelectModifierChange={setSelectModifier}
       />
 
       <ImagePreview

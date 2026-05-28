@@ -36,7 +36,9 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ☐ **"Incolla come testo semplice"**.
 - ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
   Questo mese / Più vecchi). Header sottili tra i gruppi.
-- ☐ **Multi-selezione** + elimina in blocco.
+- ✅ **Multi-selezione** + elimina in blocco — Ctrl/Alt+click (configurabile) per
+  attivare, Shift+click per estendere il range, modalità selezione con checkbox
+  e barra di azioni (Elimina, Pinna/Despinna, Aggiungi tag).
 - ☐ **Export / Import** della cronologia.
 
 ## 🎨 Polish & distribuzione
@@ -63,8 +65,9 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Impostazioni divise in tab (Generali / Sicurezza / Reset), altezza stabile
 - ✅ Raggruppa per data nella cronologia
 - ✅ Riordino drag & drop delle clip fissate
+- ✅ Multi-selezione con barra di azioni e modifier configurabile
 
 ### Prossimi candidati (non ancora fatti)
-- Multi-selezione + elimina in blocco
 - Export / Import della cronologia (JSON)
+- Polish & motion (pass animazioni dedicato)
 - README + onboarding al primo avvio

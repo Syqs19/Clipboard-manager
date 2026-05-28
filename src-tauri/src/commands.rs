@@ -81,6 +81,49 @@ pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
     db.delete_clip(id).map_err(|e| e.to_string())
 }
 
+/// Elimina più clip in un colpo (con cleanup dei file immagine).
+#[tauri::command]
+pub fn remove_clips(db: State<Database>, ids: Vec<i64>) -> Result<(), String> {
+    if let Ok(paths) = db.image_paths_for(&ids) {
+        for p in paths {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    db.delete_clips(&ids).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Imposta lo stato pinned su più clip (true=pinna, false=despinna).
+#[tauri::command]
+pub fn bulk_set_pinned(
+    db: State<Database>,
+    ids: Vec<i64>,
+    pinned: bool,
+) -> Result<(), String> {
+    for id in ids {
+        db.set_pinned(id, pinned).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Aggiunge un tag manuale a più clip in un colpo.
+#[tauri::command]
+pub fn bulk_add_tag(
+    db: State<Database>,
+    ids: Vec<i64>,
+    name: String,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("nome tag vuoto".to_string());
+    }
+    let tag_id = db.get_or_create_tag(name, None, false).map_err(|e| e.to_string())?;
+    for id in ids {
+        db.attach_tag(id, tag_id).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn clear_history(db: State<Database>) -> Result<(), String> {
     db.clear_unpinned().map_err(|e| e.to_string())
