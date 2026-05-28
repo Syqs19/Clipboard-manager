@@ -47,7 +47,7 @@ export function ClipList({
   copiedId: number | null;
   onSelect: (index: number) => void;
   colorOf: (name: string) => string;
-  onCopy: (id: number) => void;
+  onCopy: (id: number, asPlain?: boolean) => void;
   onPreview: (clip: Clip) => void;
   onTogglePin: (clip: Clip) => void;
   onDelete: (id: number) => void;

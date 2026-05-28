@@ -176,3 +176,188 @@ pub fn write_file_drop(paths: &[String]) -> bool {
 pub fn write_file_drop(_paths: &[String]) -> bool {
     false
 }
+
+/// Legge il frammento HTML dalla clipboard (formato "HTML Format" di Windows),
+/// estraendolo tra StartFragment/EndFragment. None se non c'è HTML.
+#[cfg(windows)]
+pub fn read_html() -> Option<String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW,
+    };
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    unsafe {
+        let cf_html = RegisterClipboardFormatW(wide("HTML Format").as_ptr());
+        if cf_html == 0 {
+            return None;
+        }
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return None;
+        }
+        let h = GetClipboardData(cf_html);
+        if h.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let ptr = GlobalLock(h) as *const u8;
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let size = GlobalSize(h);
+        let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+        GlobalUnlock(h);
+        CloseClipboard();
+
+        // CF_HTML è UTF-8 con un header tipo:
+        // Version:0.9\r\nStartHTML:...\r\nEndHTML:...\r\nStartFragment:NNNNN\r\nEndFragment:NNNNN\r\n<html>...
+        let s = String::from_utf8_lossy(&bytes);
+        let start = parse_offset(&s, "StartFragment:")?;
+        let end = parse_offset(&s, "EndFragment:")?;
+        if start >= end || end > bytes.len() {
+            return None;
+        }
+        let frag = String::from_utf8_lossy(&bytes[start..end]).trim().to_string();
+        if frag.is_empty() {
+            None
+        } else {
+            Some(frag)
+        }
+    }
+}
+
+#[cfg(windows)]
+fn parse_offset(s: &str, key: &str) -> Option<usize> {
+    let i = s.find(key)? + key.len();
+    let rest = &s[i..];
+    let end = rest.find(|c: char| !c.is_ascii_digit())?;
+    rest[..end].parse::<usize>().ok()
+}
+
+#[cfg(not(windows))]
+pub fn read_html() -> Option<String> {
+    None
+}
+
+/// Scrive contemporaneamente CF_UNICODETEXT (plain) e CF_HTML (formattato) nella
+/// clipboard. Ritorna true se entrambi i formati sono stati impostati.
+#[cfg(windows)]
+pub fn write_text_with_html(plain: &str, html: &str) -> bool {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    };
+    use windows_sys::Win32::System::Memory::{
+        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+    };
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    // costruisce l'header CF_HTML con offset corretti
+    let cf_html_bytes = build_cf_html_payload(html);
+
+    unsafe {
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return false;
+        }
+        EmptyClipboard();
+
+        // CF_UNICODETEXT (1 = CF_TEXT, 13 = CF_UNICODETEXT)
+        const CF_UNICODETEXT: u32 = 13;
+        let wide_text = wide(plain);
+        let txt_bytes = wide_text.len() * 2;
+        let h_txt = GlobalAlloc(GMEM_MOVEABLE, txt_bytes);
+        let mut ok_txt = false;
+        if !h_txt.is_null() {
+            let p = GlobalLock(h_txt) as *mut u16;
+            if !p.is_null() {
+                std::ptr::copy_nonoverlapping(wide_text.as_ptr(), p, wide_text.len());
+                GlobalUnlock(h_txt);
+                ok_txt = !SetClipboardData(
+                    CF_UNICODETEXT,
+                    h_txt as windows_sys::Win32::Foundation::HANDLE,
+                )
+                .is_null();
+            }
+        }
+
+        // CF_HTML (registrato dinamicamente)
+        let mut ok_html = false;
+        let cf_html_name = wide("HTML Format");
+        let cf_html = RegisterClipboardFormatW(cf_html_name.as_ptr());
+        if cf_html != 0 {
+            // alloca con un byte extra per il null terminator finale (richiesto da CF_HTML)
+            let h = GlobalAlloc(GMEM_MOVEABLE, cf_html_bytes.len() + 1);
+            if !h.is_null() {
+                let p = GlobalLock(h) as *mut u8;
+                if !p.is_null() {
+                    std::ptr::copy_nonoverlapping(
+                        cf_html_bytes.as_ptr(),
+                        p,
+                        cf_html_bytes.len(),
+                    );
+                    *p.add(cf_html_bytes.len()) = 0; // null terminator
+                    GlobalUnlock(h);
+                    ok_html = !SetClipboardData(
+                        cf_html,
+                        h as windows_sys::Win32::Foundation::HANDLE,
+                    )
+                    .is_null();
+                }
+            }
+        }
+
+        CloseClipboard();
+        ok_txt && ok_html
+    }
+}
+
+#[cfg(windows)]
+fn build_cf_html_payload(fragment: &str) -> Vec<u8> {
+    // costruisce l'header con placeholder lunghezza fissa (8 cifre zero-padded),
+    // poi calcola gli offset reali e li sostituisce in-place.
+    let prefix =
+        "Version:0.9\r\nStartHTML:00000000\r\nEndHTML:00000000\r\nStartFragment:00000000\r\nEndFragment:00000000\r\n";
+    let html_open = "<html><body>\r\n<!--StartFragment-->";
+    let html_close = "<!--EndFragment-->\r\n</body></html>";
+
+    let mut s = String::with_capacity(
+        prefix.len() + html_open.len() + fragment.len() + html_close.len(),
+    );
+    s.push_str(prefix);
+    let start_html = s.len();
+    s.push_str(html_open);
+    let start_fragment = s.len();
+    s.push_str(fragment);
+    let end_fragment = s.len();
+    s.push_str(html_close);
+    let end_html = s.len();
+
+    // sostituisce i placeholder (8 cifre) — gli offset stanno tutti sotto 10^8
+    let replace = |buf: &mut String, key: &str, value: usize| {
+        let needle = format!("{key}00000000");
+        let replacement = format!("{key}{:08}", value);
+        if let Some(at) = buf.find(&needle) {
+            buf.replace_range(at..at + needle.len(), &replacement);
+        }
+    };
+    replace(&mut s, "StartHTML:", start_html);
+    replace(&mut s, "EndHTML:", end_html);
+    replace(&mut s, "StartFragment:", start_fragment);
+    replace(&mut s, "EndFragment:", end_fragment);
+    s.into_bytes()
+}
+
+#[cfg(not(windows))]
+pub fn write_text_with_html(_plain: &str, _html: &str) -> bool {
+    false
+}

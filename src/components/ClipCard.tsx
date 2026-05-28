@@ -11,6 +11,7 @@ import {
   Pin,
   Plus,
   Trash2,
+  Type,
   X,
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -71,7 +72,7 @@ export function ClipCard({
   selectedForBulk?: boolean;
   onSelect: () => void;
   colorOf: (name: string) => string;
-  onCopy: (id: number) => void;
+  onCopy: (id: number, asPlain?: boolean) => void;
   onPreview: (clip: Clip) => void;
   onTogglePin: (clip: Clip) => void;
   onDelete: (id: number) => void;
@@ -98,6 +99,7 @@ export function ClipCard({
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
   const isFiles = clip.content_type === "files";
+  const hasHtml = !!clip.content_html && !isImage && !isFiles;
   // per i file, content è un JSON array di path
   const filePaths: string[] = (() => {
     if (!isFiles || !clip.content) return [];
@@ -241,6 +243,14 @@ export function ClipCard({
           {clip.pinned && (
             <Pin className="h-3 w-3 fill-amber-400 text-amber-400" />
           )}
+          {hasHtml && (
+            <span
+              title="Contiene formattazione HTML"
+              className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300"
+            >
+              HTML
+            </span>
+          )}
           {clip.tags.map((t) => (
             <span
               key={t}
@@ -327,9 +337,20 @@ export function ClipCard({
               <Pencil className="h-4 w-4" />
             </IconButton>
           )}
-          <IconButton title="Copia" onClick={() => onCopy(clip.id)}>
+          <IconButton
+            title={hasHtml ? "Copia con formattazione" : "Copia"}
+            onClick={() => onCopy(clip.id)}
+          >
             <Copy className="h-4 w-4" />
           </IconButton>
+          {hasHtml && (
+            <IconButton
+              title="Copia come testo semplice"
+              onClick={() => onCopy(clip.id, true)}
+            >
+              <Type className="h-4 w-4" />
+            </IconButton>
+          )}
           <IconButton
             title={clip.pinned ? "Rimuovi dai fissati" : "Fissa"}
             onClick={() => onTogglePin(clip)}

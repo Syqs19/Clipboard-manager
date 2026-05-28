@@ -35,7 +35,9 @@ pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, Str
 
 /// Mette il contenuto completo della clip nella clipboard di sistema
 /// (testo intero per i sensibili, immagine ricostruita dal PNG per le immagini).
-fn write_clip_to_clipboard(db: &Db, id: i64) -> Result<(), String> {
+/// Se `as_plain` è true, una clip con HTML viene copiata SOLO come testo (utile per
+/// "Incolla come testo semplice").
+fn write_clip_to_clipboard(db: &Db, id: i64, as_plain: bool) -> Result<(), String> {
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
@@ -62,14 +64,25 @@ fn write_clip_to_clipboard(db: &Db, id: i64) -> Result<(), String> {
             }
         }
     } else if let Some(content) = clip.content {
+        // se è disponibile la versione HTML e l'utente non ha chiesto "plain",
+        // scrive entrambi i formati (CF_UNICODETEXT + CF_HTML) così l'incolla
+        // mantiene la formattazione
+        if !as_plain {
+            if let Some(html) = clip.content_html.as_deref() {
+                if crate::win_clipboard::write_text_with_html(&content, html) {
+                    return Ok(());
+                }
+                // fallback su testo semplice se la scrittura HTML fallisce
+            }
+        }
         cb.set_text(content).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn copy_clip(db: State<Database>, id: i64) -> Result<(), String> {
-    write_clip_to_clipboard(db.inner(), id)
+pub fn copy_clip(db: State<Database>, id: i64, as_plain: Option<bool>) -> Result<(), String> {
+    write_clip_to_clipboard(db.inner(), id, as_plain.unwrap_or(false))
 }
 
 #[tauri::command]
@@ -291,6 +304,7 @@ pub fn import_history(
 
         let new = NewClip {
             content: c.content,
+            content_html: None,
             content_type: c.content_type,
             image_path,
             preview: c.preview,

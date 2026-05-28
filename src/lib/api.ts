@@ -5,7 +5,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export interface Clip {
   id: number;
   content: string | null;
-  content_type: string; // 'text' | 'image' | 'url'
+  content_html: string | null;
+  content_type: string; // 'text' | 'image' | 'url' | 'files'
   image_path: string | null;
   thumb_path: string | null;
   preview: string;
@@ -21,7 +22,8 @@ export interface Clip {
 export const api = {
   listClips: (limit?: number) => invoke<Clip[]>("list_clips", { limit }),
   searchClips: (query: string) => invoke<Clip[]>("search_clips", { query }),
-  copyClip: (id: number) => invoke<void>("copy_clip", { id }),
+  copyClip: (id: number, asPlain = false) =>
+    invoke<void>("copy_clip", { id, asPlain }),
   togglePin: (id: number, pinned: boolean) =>
     invoke<void>("toggle_pin", { id, pinned }),
   reorderPinned: (ids: number[]) => invoke<void>("reorder_pinned", { ids }),

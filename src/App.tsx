@@ -171,8 +171,8 @@ function App() {
   selRef.current = sel;
   modalRef.current = settingsOpen || previewClip !== null;
 
-  const handleCopy = (id: number) => {
-    api.copyClip(id);
+  const handleCopy = (id: number, asPlain = false) => {
+    api.copyClip(id, asPlain);
     flashCopied(id);
   };
   const handlePin = async (clip: Clip) => {

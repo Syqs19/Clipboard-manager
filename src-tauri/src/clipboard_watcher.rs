@@ -86,6 +86,7 @@ impl Handler {
         };
         let new = NewClip {
             content: Some(json),
+            content_html: None,
             content_type: "files".into(),
             image_path: None,
             preview,
@@ -131,8 +132,12 @@ impl Handler {
             return Ok(());
         }
         let preview: String = text.trim().chars().take(200).collect();
+        // se la clipboard contiene anche il formato HTML, lo conserviamo per
+        // permettere "Copia con formattazione" / "Copia come testo semplice"
+        let html = win_clipboard::read_html();
         let new = NewClip {
             content: Some(text.clone()),
+            content_html: html,
             content_type: cat.content_type.to_string(),
             image_path: None,
             preview,
@@ -168,6 +173,7 @@ impl Handler {
         }
         let new = NewClip {
             content: None,
+            content_html: None,
             content_type: "image".into(),
             image_path: Some(path.to_string_lossy().to_string()),
             preview: format!("Immagine {}×{}", img.width, img.height),

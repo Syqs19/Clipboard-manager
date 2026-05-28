@@ -32,10 +32,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
   per riordinare. Persistito su `pinned_order` nel DB.
 - ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
   sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
-- ⏳ **Più tipi di contenuto**: **file copiati ✅** (CF_HDROP via WinAPI, lettura
-  e scrittura nella clipboard, tag automatico "File", sezione dedicata in
-  sidebar). HTML/RTF ancora da fare.
-- ☐ **"Incolla come testo semplice"**.
+- ✅ **Più tipi di contenuto**: **file copiati** (CF_HDROP) + **HTML**
+  (CF_HTML letto/scritto via WinAPI, badge "HTML" nella card, bottone
+  "Copia come testo semplice" per incollare senza formattazione).
+- ✅ **"Incolla come testo semplice"** — bottone dedicato sulle clip con HTML
+  che mette solo CF_UNICODETEXT (no formattazione).
 - ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
   Questo mese / Più vecchi). Header sottili tra i gruppi.
 - ✅ **Multi-selezione** + elimina in blocco — Ctrl/Alt+click (configurabile) per
@@ -88,9 +89,10 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Test backend ampliati (28 unit test)
 - ✅ File copiati dall'Explorer (CF_HDROP read/write)
 - ✅ Sistema toast per gli errori in UI
+- ✅ Cattura HTML (CF_HTML) + bottone "Copia come testo semplice"
 
 ### Prossimi candidati (non ancora fatti)
 - Polish & motion (pass animazioni dedicato)
-- HTML/RTF + "Incolla come testo semplice"
 - Cifratura DB (SQLCipher)
 - README + onboarding al primo avvio
+- RTF (oltre a HTML già fatto)
