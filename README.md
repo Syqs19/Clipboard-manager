@@ -37,7 +37,16 @@ Opening the files with DB Browser or a PNG viewer just shows random bytes. UI ma
 
 ## Install
 
-Grab the installer from the [Releases](https://github.com/Syqs19/Clipboard-manager/releases) page (`.msi` or `.exe`) and run it. Code signing isn't set up yet, so Windows SmartScreen may show a warning — click "More info" → "Run anyway".
+Download the latest installer:
+
+- **MSI** (recommended): [Clipboard.Manager_x64_en-US.msi](https://github.com/Syqs19/Clipboard-manager/releases/latest/download/Clipboard.Manager_0.1.0_x64_en-US.msi)
+- **NSIS exe** (alternative): [Clipboard.Manager_x64-setup.exe](https://github.com/Syqs19/Clipboard-manager/releases/latest/download/Clipboard.Manager_0.1.0_x64-setup.exe)
+
+Double-click to install. Code signing isn't set up yet, so Windows SmartScreen may show a warning — click "More info" → "Run anyway".
+
+### Updates
+
+The app checks for updates automatically on launch. When a new version is available, a green **"Update to vX.Y.Z"** button appears at the bottom of the sidebar. Clicking it downloads the signed bundle, verifies its signature against the embedded public key, installs it and relaunches the app.
 
 ## Development
 

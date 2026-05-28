@@ -47,7 +47,7 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ **Micro-animations everywhere** — card hover lift, new-clip slide-in, "Copied" with back-out bounce, modals fade+scale in/out (`useExitAnimation` hook + state machine), sidebar ActiveBar that slides between active items, multi-select checkbox pop, tag-picker scale, L-guide drawn for the Pinned sub-entry (vertical then horizontal, reverse on exit), View Transitions reserved as a fallback. All respect `prefers-reduced-motion`.
 - ✅ **Onboarding at first launch** — overlay with brand, configured hotkey shown, 4 tips (open shortcut, keyboard nav, pin & tags, encryption + masking). Persisted via `onboarded` boolean in the store.
 - ✅ **Full English UI + README**.
-- ☐ **Auto-update** (`tauri-plugin-updater`) + **GitHub Actions CI** that generates releases.
+- ✅ **Auto-update** (`tauri-plugin-updater`) + **GitHub Actions CI**. Silent check on launch; when an update is available a green glowing "Update to vX.Y.Z" button appears at the bottom of the sidebar. Clicking it downloads the signed bundle (minisign), verifies it, installs, and relaunches. Releases are produced by `.github/workflows/release.yml` on `v*` tag push: builds on `windows-latest` with Strawberry Perl (SQLCipher/OpenSSL), signs MSI + NSIS with `TAURI_SIGNING_PRIVATE_KEY` secret, generates `latest.json` manifest, publishes a GitHub Release with all artifacts.
 - ☐ **Code signing** (removes SmartScreen warning — needs a paid certificate).
 
 ## 🧰 Code quality
@@ -84,11 +84,13 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ Self-write guard (no more auto-bump when copying from history)
 - ✅ Onboarding at first launch
 - ✅ Full English i18n (UI + README + tray + error messages)
+- ✅ Auto-update via `tauri-plugin-updater` + GitHub Actions release workflow
+- ✅ First public release: **v0.1.0** with signed MSI + NSIS bundles
 
 ### Next candidates (not yet done)
-- Auto-update + GitHub Actions CI (release `.msi`/`.exe` on tag, in-app update notifier)
 - Code signing (paid certificate → removes SmartScreen warning on install)
-- Optional passphrase as an alternative to DPAPI-only (opt-in, opens at launch)
+- Optional passphrase as an alternative to DPAPI-only (opt-in, prompts at launch)
 - Drag-out of a clip from the card to an external app (real clipboard-manager feel)
 - Stats panel (total clips, pinned, disk usage)
 - Settings → About panel (version, repo link, license)
+- Real screenshots in README
