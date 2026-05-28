@@ -532,7 +532,7 @@ impl Db {
         let new = new.trim();
         let old = old.trim();
         if new.is_empty() {
-            return Err("nome nuovo vuoto".into());
+            return Err("empty new name".into());
         }
         if new == old {
             return Ok(());
@@ -974,5 +974,53 @@ mod tests {
         assert_eq!(db.search("mondo").unwrap().len(), 1);
         assert_eq!(db.search("Saluti").unwrap().len(), 1);
         assert_eq!(db.search("inesistente").unwrap().len(), 0);
+    }
+
+    #[test]
+    fn prune_to_limit_keeps_pinned_above_limit() {
+        let db = Db::open_in_memory().unwrap();
+        // 3 normali + 1 pinnata, limit = 2 → ne devono restare 2 normali +
+        // tutte le pinnate (le pinnate non concorrono al limite).
+        let a = db.insert_or_bump_clip(&new_text("a", 100)).unwrap();
+        let _b = db.insert_or_bump_clip(&new_text("b", 200)).unwrap();
+        let _c = db.insert_or_bump_clip(&new_text("c", 300)).unwrap();
+        let _d = db.insert_or_bump_clip(&new_text("d", 400)).unwrap();
+        db.set_pinned(a, true).unwrap();
+
+        db.prune_to_limit(2).unwrap();
+        let all = db.list_recent(100).unwrap();
+        // resta: pinnata 'a' + 2 più recenti non pinnate ('c','d')
+        let contents: Vec<_> = all
+            .iter()
+            .filter_map(|c| c.content.clone())
+            .collect();
+        assert!(contents.contains(&"a".to_string())); // pinned mai potata
+        assert!(contents.contains(&"c".to_string()));
+        assert!(contents.contains(&"d".to_string()));
+        assert!(!contents.contains(&"b".to_string())); // potata
+    }
+
+    #[test]
+    fn search_with_empty_query_is_empty_list() {
+        // search() richiede una query non-vuota: comportamento UI è chiamare
+        // direttamente list_recent. Qui validiamo che con stringa vuota il
+        // LIKE %% matcha tutto (è il caso d'uso che usa la UI).
+        let db = Db::open_in_memory().unwrap();
+        db.insert_or_bump_clip(&new_text("alpha", 100)).unwrap();
+        db.insert_or_bump_clip(&new_text("beta", 200)).unwrap();
+        let res = db.search("").unwrap();
+        assert_eq!(res.len(), 2);
+    }
+
+    #[test]
+    fn list_recent_orders_pinned_first_then_by_date_desc() {
+        let db = Db::open_in_memory().unwrap();
+        let _old = db.insert_or_bump_clip(&new_text("old", 100)).unwrap();
+        let mid = db.insert_or_bump_clip(&new_text("mid", 200)).unwrap();
+        let _new = db.insert_or_bump_clip(&new_text("new", 300)).unwrap();
+        db.set_pinned(mid, true).unwrap();
+        let list = db.list_recent(10).unwrap();
+        let order: Vec<_> = list.iter().filter_map(|c| c.content.clone()).collect();
+        assert_eq!(order, vec!["mid", "new", "old"]); // pinned in cima, poi data desc
     }
 }

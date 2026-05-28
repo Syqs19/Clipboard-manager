@@ -32,10 +32,10 @@ pub fn toggle_main_window(app: &AppHandle) {
 
 /// Crea l'icona nel tray con menu: Apri / Pausa cattura / Impostazioni / Esci.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open_i = MenuItem::with_id(app, "open", "Apri", true, None::<&str>)?;
-    let pause_i = MenuItem::with_id(app, "pause", "Pausa cattura", true, None::<&str>)?;
-    let settings_i = MenuItem::with_id(app, "settings", "Impostazioni", true, None::<&str>)?;
-    let quit_i = MenuItem::with_id(app, "quit", "Esci", true, None::<&str>)?;
+    let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+    let pause_i = MenuItem::with_id(app, "pause", "Pause capture", true, None::<&str>)?;
+    let settings_i = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open_i, &pause_i, &settings_i, &quit_i])?;
 
     // copia da spostare nella closure, per aggiornare l'etichetta Pausa/Riprendi
@@ -52,9 +52,9 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 let now_paused = !state.paused.load(Ordering::Relaxed);
                 state.paused.store(now_paused, Ordering::Relaxed);
                 let _ = pause_item.set_text(if now_paused {
-                    "Riprendi cattura"
+                    "Resume capture"
                 } else {
-                    "Pausa cattura"
+                    "Pause capture"
                 });
             }
             "settings" => {

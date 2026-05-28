@@ -47,7 +47,7 @@ export function ImagePreview({
             exit.exiting ? "anim-scale-out" : "anim-scale-in"
           }`}
         >
-          Caricamento…
+          Loading…
         </div>
       )}
       <div
@@ -60,7 +60,7 @@ export function ImagePreview({
           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-400"
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          {copied ? "Copiato" : "Copia"}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <button

@@ -52,17 +52,26 @@ impl ClipboardHandler for Handler {
     }
 }
 
+/// Vero se `hash` combacia con il valore corrente di `slot`: in tal caso
+/// consuma il valore (lo resetta a None). Estratta come funzione pura per
+/// renderla testabile e riusabile.
+pub fn check_and_consume_self_write(slot: &LastSelfWrite, hash: &str) -> bool {
+    let mut guard = match slot.lock() {
+        Ok(g) => g,
+        Err(_) => return false,
+    };
+    if guard.as_deref() == Some(hash) {
+        *guard = None;
+        return true;
+    }
+    false
+}
+
 impl Handler {
-    /// Restituisce true se l'hash combacia con l'ultima self-write: in tal
-    /// caso "consume" il valore (lo resetta a None) e aggiorna last_hash
-    /// per evitare ricatture immediate.
+    /// Wrapper attorno a [`check_and_consume_self_write`] che inoltre aggiorna
+    /// `last_hash` per evitare ricatture immediate.
     fn consume_self_write(&mut self, hash: &str) -> bool {
-        let mut guard = match self.last_self_write.lock() {
-            Ok(g) => g,
-            Err(_) => return false,
-        };
-        if guard.as_deref() == Some(hash) {
-            *guard = None;
+        if check_and_consume_self_write(&self.last_self_write, hash) {
             self.last_hash = Some(hash.to_string());
             return true;
         }
@@ -124,7 +133,7 @@ impl Handler {
             hash,
         };
         let id = self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
-        if let Ok(tag_id) = self.db.get_or_create_tag("File", None, true) {
+        if let Ok(tag_id) = self.db.get_or_create_tag("Files", None, true) {
             let _ = self.db.attach_tag(id, tag_id);
         }
         self.finish(id);
@@ -223,7 +232,7 @@ impl Handler {
             content_rtf: None,
             content_type: "image".into(),
             image_path: Some(path.to_string_lossy().to_string()),
-            preview: format!("Immagine {}×{}", img.width, img.height),
+            preview: format!("Image {}×{}", img.width, img.height),
             created_at: db::now_millis(),
             char_count: 0,
             sensitive: false,
@@ -240,6 +249,39 @@ impl Handler {
     fn finish(&self, id: i64) {
         let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
         let _ = self.app.emit("clips-changed", id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    fn slot(initial: Option<&str>) -> LastSelfWrite {
+        Arc::new(Mutex::new(initial.map(|s| s.to_string())))
+    }
+
+    #[test]
+    fn consume_returns_true_and_clears_on_match() {
+        let s = slot(Some("abc"));
+        assert!(check_and_consume_self_write(&s, "abc"));
+        // valore consumato → la prossima check stesso hash è false
+        assert!(!check_and_consume_self_write(&s, "abc"));
+        assert!(s.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn consume_returns_false_and_keeps_on_mismatch() {
+        let s = slot(Some("abc"));
+        assert!(!check_and_consume_self_write(&s, "xyz"));
+        // il valore corrente non viene toccato
+        assert_eq!(s.lock().unwrap().as_deref(), Some("abc"));
+    }
+
+    #[test]
+    fn consume_returns_false_on_empty_slot() {
+        let s = slot(None);
+        assert!(!check_and_consume_self_write(&s, "abc"));
     }
 }
 

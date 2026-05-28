@@ -14,7 +14,7 @@ export function SearchBar({
         autoFocus
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Cerca nelle clip…"
+        placeholder="Search clips…"
         className="w-full rounded-lg border border-zinc-700/60 bg-zinc-800/60 py-2 pl-9 pr-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors focus:border-zinc-600"
       />
     </div>

@@ -18,6 +18,7 @@ import { Settings } from "./components/Settings";
 import { ImagePreview } from "./components/ImagePreview";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
+import { Onboarding } from "./components/Onboarding";
 
 function App() {
   const notify = useNotify();
@@ -29,6 +30,8 @@ function App() {
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [hotkey, setHotkey] = useState("Ctrl+Shift+V");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectModifier, setSelectModifier] = useState<SelectModifier>("ctrl");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -103,6 +106,31 @@ function App() {
     }).then((u) => (unlisten = u));
     return () => unlisten?.();
   }, []);
+
+  // primo avvio: mostra l'onboarding e leggi l'hotkey corrente
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await Store.load("settings.json");
+        const onboarded = await store.get<boolean>("onboarded");
+        const savedHotkey = await store.get<string>("hotkey");
+        if (savedHotkey) setHotkey(savedHotkey);
+        if (!onboarded) setOnboardingOpen(true);
+      } catch {
+        setOnboardingOpen(true);
+      }
+    })();
+  }, []);
+  const closeOnboarding = async () => {
+    setOnboardingOpen(false);
+    try {
+      const store = await Store.load("settings.json");
+      await store.set("onboarded", true);
+      await store.save();
+    } catch {
+      // ignora: al massimo si rivede al prossimo avvio
+    }
+  };
 
   // apertura impostazioni dal menu tray
   useEffect(() => {
@@ -401,6 +429,12 @@ function App() {
         clip={previewClip}
         onClose={() => setPreviewClip(null)}
         onCopy={handleCopy}
+      />
+
+      <Onboarding
+        open={onboardingOpen}
+        onClose={closeOnboarding}
+        hotkey={hotkey}
       />
     </div>
   );

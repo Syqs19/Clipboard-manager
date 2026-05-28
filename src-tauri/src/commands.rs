@@ -50,7 +50,7 @@ fn write_clip_to_clipboard(
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "clip non trovata".to_string())?;
+        .ok_or_else(|| "clip not found".to_string())?;
     let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
 
     // segnala al watcher: il prossimo evento clipboard con questo hash
@@ -83,7 +83,7 @@ fn write_clip_to_clipboard(
                 serde_json::to_string(&paths).map_err(|e| e.to_string())?;
             mark_self_write(crate::db::content_hash(&watcher_json));
             if !crate::win_clipboard::write_file_drop(&paths) {
-                return Err("Impossibile scrivere la lista di file nella clipboard".into());
+                return Err("Couldn't write the file list to the clipboard".into());
             }
         }
     } else if let Some(content) = clip.content {
@@ -290,7 +290,7 @@ pub fn import_history(
     let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let data: ExportData = serde_json::from_str(&json).map_err(|e| e.to_string())?;
     if data.version != 1 {
-        return Err(format!("formato export sconosciuto (v{})", data.version));
+        return Err(format!("unknown export format (v{})", data.version));
     }
 
     let images_dir = app
@@ -394,7 +394,7 @@ pub fn bulk_add_tag(
 ) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("nome tag vuoto".to_string());
+        return Err("empty tag name".to_string());
     }
     let tag_id = db.get_or_create_tag(name, None, false).map_err(|e| e.to_string())?;
     for id in ids {
@@ -443,7 +443,7 @@ pub fn bulk_remove_tag(
 pub fn reveal_in_explorer(path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
-        return Err("Il percorso non esiste".into());
+        return Err("Path does not exist".into());
     }
     // `explorer.exe /select,"path"` richiede che il path SIA quotato letteralmente,
     // ma std::process::Command::arg quoterebbe l'intero "/select,..." rompendo il
@@ -500,7 +500,7 @@ pub fn update_clip(db: State<Database>, id: i64, content: String) -> Result<(), 
 pub fn add_tag(db: State<Database>, id: i64, name: String) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("nome tag vuoto".to_string());
+        return Err("empty tag name".to_string());
     }
     let tag_id = db.get_or_create_tag(name, None, false).map_err(|e| e.to_string())?;
     db.attach_tag(id, tag_id).map_err(|e| e.to_string())

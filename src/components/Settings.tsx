@@ -24,8 +24,8 @@ const MODIFIER_LABELS: Record<SelectModifier, string> = {
 const KIND_LABELS: Record<SensitiveKind, string> = {
   email: "Email",
   iban: "IBAN",
-  card: "Carte di credito",
-  token: "Token / chiavi API",
+  card: "Credit cards",
+  token: "Tokens / API keys",
 };
 
 function Toggle({
@@ -204,26 +204,26 @@ export function Settings({
   };
   const onExport = async () => {
     const path = await saveDialog({
-      title: "Esporta cronologia",
+      title: "Export history",
       defaultPath: `clipboard-export-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (!path) return;
     try {
       const n = await api.exportHistory(path);
-      await messageDialog(`${n} clip esportate in:\n${path}`, {
-        title: "Export completato",
+      await messageDialog(`${n} clips exported to:\n${path}`, {
+        title: "Export complete",
       });
     } catch (e) {
-      await messageDialog(`Errore durante l'export: ${e}`, {
-        title: "Export fallito",
+      await messageDialog(`Error during export: ${e}`, {
+        title: "Export failed",
         kind: "error",
       });
     }
   };
   const onImport = async (mode: "merge" | "replace") => {
     const selected = await openDialog({
-      title: "Importa cronologia",
+      title: "Import history",
       multiple: false,
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
@@ -232,13 +232,13 @@ export function Settings({
       const n = await api.importHistory(selected, mode);
       const summary =
         mode === "replace"
-          ? `Cronologia sostituita: ${n} clip caricate dal file.`
-          : `${n} nuove clip aggiunte (le clip con stesso contenuto già presenti sono state ignorate).`;
-      await messageDialog(summary, { title: "Import completato" });
+          ? `History replaced: ${n} clips loaded from file.`
+          : `${n} new clips added (clips with the same content already present were skipped).`;
+      await messageDialog(summary, { title: "Import complete" });
       onReload();
     } catch (e) {
-      await messageDialog(`Errore durante l'import: ${e}`, {
-        title: "Import fallito",
+      await messageDialog(`Error during import: ${e}`, {
+        title: "Import failed",
         kind: "error",
       });
     }
@@ -282,7 +282,7 @@ export function Settings({
         }`}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
-          <h2 className="text-sm font-semibold text-zinc-100">Impostazioni</h2>
+          <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
           <button
             onClick={close}
             className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
@@ -294,8 +294,8 @@ export function Settings({
         <div className="flex gap-1 border-b border-zinc-800 px-3 pt-2">
           {(
             [
-              ["general", "Generali"],
-              ["security", "Sicurezza"],
+              ["general", "General"],
+              ["security", "Security"],
               ["reset", "Reset"],
             ] as const
           ).map(([id, label]) => (
@@ -320,29 +320,29 @@ export function Settings({
           {tab === "general" && (
             <>
               <Row
-                title="Avvia all'avvio del sistema"
-                hint="Apri automaticamente all'accensione del PC"
+                title="Launch on system startup"
+                hint="Open automatically when the PC boots"
               >
                 <Toggle checked={autostart} onChange={onAutostart} />
               </Row>
 
               <Row
-                title="Avvia nascosto nel tray"
-                hint="All'avvio non mostrare la finestra"
+                title="Start hidden in tray"
+                hint="Don't show the window on startup"
               >
                 <Toggle checked={startHidden} onChange={onStartHidden} />
               </Row>
 
               <Row
-                title="Chiudi nel tray"
-                hint="La X nasconde invece di uscire dall'app"
+                title="Close to tray"
+                hint="The X hides instead of quitting the app"
               >
                 <Toggle checked={closeToTray} onChange={onCloseToTray} />
               </Row>
 
               <Row
-                title="Max clip in cronologia"
-                hint="Le clip non fissate oltre questo numero vengono rimosse"
+                title="Max clips in history"
+                hint="Unpinned clips above this number are removed"
               >
                 <input
                   type="number"
@@ -353,7 +353,7 @@ export function Settings({
                 />
               </Row>
 
-              <Row title="Scorciatoia globale" hint="Apre/nasconde la finestra">
+              <Row title="Global shortcut" hint="Opens/hides the window">
                 <button
                   onClick={() => {
                     setHotkeyError("");
@@ -366,7 +366,7 @@ export function Settings({
                   }`}
                 >
                   <Keyboard className="h-3.5 w-3.5" />
-                  {recording ? "Premi i tasti…" : hotkey}
+                  {recording ? "Press keys…" : hotkey}
                 </button>
               </Row>
               {hotkeyError && (
@@ -374,8 +374,8 @@ export function Settings({
               )}
 
               <Row
-                title="Tasto per selezione multipla"
-                hint="+ click sulle clip. Shift+click estende sempre il range."
+                title="Multi-select modifier"
+                hint="+ click on clips. Shift+click always extends the range."
               >
                 <select
                   value={selectMod}
@@ -395,8 +395,8 @@ export function Settings({
           {tab === "security" && (
             <>
               <Row
-                title="Non salvare clip sensibili"
-                hint="IBAN, carte, email, token: non vengono mai aggiunti alla cronologia"
+                title="Don't save sensitive clips"
+                hint="IBAN, cards, emails, tokens: never added to history"
               >
                 <Toggle
                   checked={dontSaveSensitive}
@@ -405,8 +405,8 @@ export function Settings({
               </Row>
 
               <Row
-                title="Cancella sensibili dopo (minuti)"
-                hint="0 = mai. Le clip sensibili non fissate scadute vengono rimosse"
+                title="Delete sensitive after (minutes)"
+                hint="0 = never. Expired unpinned sensitive clips are removed"
               >
                 <input
                   type="number"
@@ -421,12 +421,12 @@ export function Settings({
 
               <div className="py-3">
                 <div className="text-sm text-zinc-100">
-                  Categorie sensibili per la cancellazione
+                  Sensitive categories for skip/cleanup
                 </div>
                 <div className="text-xs text-zinc-500">
-                  Solo le categorie selezionate vengono saltate o cancellate. La
-                  mascheratura nella UI resta sempre attiva per tutti i
-                  sensibili.
+                  Only the selected categories are skipped or deleted. The UI
+                  masking always stays active for every detected sensitive
+                  value.
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
                   {SENSITIVE_KINDS.map((k) => (
@@ -451,44 +451,44 @@ export function Settings({
           {tab === "reset" && (
             <>
               <Row
-                title="Esporta cronologia"
-                hint="Salva tutte le clip (incluse immagini) in un file JSON"
+                title="Export history"
+                hint="Saves all clips (including images) into a JSON file"
               >
                 <button
                   onClick={onExport}
                   className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
                 >
-                  <Download className="h-3.5 w-3.5" /> Esporta
+                  <Download className="h-3.5 w-3.5" /> Export
                 </button>
               </Row>
 
               <Row
-                title="Importa cronologia (unisci)"
-                hint="Aggiunge solo le clip nuove dal file (i duplicati sono saltati)"
+                title="Import history (merge)"
+                hint="Adds only new clips from the file (duplicates are skipped)"
               >
                 <button
                   onClick={() => onImport("merge")}
                   className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
                 >
-                  <Upload className="h-3.5 w-3.5" /> Unisci
+                  <Upload className="h-3.5 w-3.5" /> Merge
                 </button>
               </Row>
 
               <Row
-                title="Importa cronologia (sostituisci)"
-                hint="Cancella la cronologia attuale e la rimpiazza con quella del file"
+                title="Import history (replace)"
+                hint="Erases the current history and replaces it with the file"
               >
                 <button
                   onClick={() => onImport("replace")}
                   className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 px-2.5 py-1 text-sm text-red-400 hover:bg-red-500/10"
                 >
-                  <Upload className="h-3.5 w-3.5" /> Sostituisci
+                  <Upload className="h-3.5 w-3.5" /> Replace
                 </button>
               </Row>
 
               <Row
-                title="Pulisci cronologia"
-                hint="Svuota la cronologia ma mantiene le clip fissate"
+                title="Clear history"
+                hint="Empties history but keeps pinned clips"
               >
             {confirmClear ? (
               <div className="flex gap-2">
@@ -496,13 +496,13 @@ export function Settings({
                   onClick={onClear}
                   className="rounded-md bg-red-500/90 px-2.5 py-1 text-sm text-white hover:bg-red-500"
                 >
-                  Conferma
+                  Confirm
                 </button>
                 <button
                   onClick={() => setConfirmClear(false)}
                   className="rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-300"
                 >
-                  Annulla
+                  Cancel
                 </button>
               </div>
             ) : (
@@ -510,7 +510,7 @@ export function Settings({
                 onClick={() => setConfirmClear(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 px-2.5 py-1 text-sm text-red-400 hover:bg-red-500/10"
               >
-                <Trash2 className="h-3.5 w-3.5" /> Pulisci
+                <Trash2 className="h-3.5 w-3.5" /> Clear
               </button>
             )}
               </Row>

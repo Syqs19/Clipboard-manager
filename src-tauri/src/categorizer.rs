@@ -68,15 +68,15 @@ fn classify(trimmed: &str, original: &str) -> (&'static str, &'static str) {
         return ("text", "Email");
     }
     if is_numeric_like(trimmed) {
-        return ("text", "Numeri");
+        return ("text", "Numbers");
     }
     if looks_like_code(trimmed) {
-        return ("text", "Codice");
+        return ("text", "Code");
     }
     if original.chars().count() > LONG_TEXT_THRESHOLD {
-        return ("text", "Testo lungo");
+        return ("text", "Long text");
     }
-    ("text", "Testo")
+    ("text", "Text")
 }
 
 /// Restituisce il sottotipo del sensibile, se presente.
@@ -181,11 +181,11 @@ mod tests {
 
     #[test]
     fn numbers_and_sensitivity() {
-        assert_eq!(categorize("4111 1111 1111 1111").tag, "Numeri");
-        assert!(categorize("4111 1111 1111 1111").sensitive); // carta
+        assert_eq!(categorize("4111 1111 1111 1111").tag, "Numbers");
+        assert!(categorize("4111 1111 1111 1111").sensitive); // card
         assert!(categorize("IT60X0542811101000000123456").sensitive); // IBAN
-        assert_eq!(categorize("42").tag, "Numeri");
-        assert!(!categorize("42").sensitive); // numero corto: non sensibile
+        assert_eq!(categorize("42").tag, "Numbers");
+        assert!(!categorize("42").sensitive); // short number: not sensitive
     }
 
     #[test]
@@ -205,16 +205,16 @@ mod tests {
 
     #[test]
     fn code() {
-        assert_eq!(categorize("fn main() { println!(\"hi\"); }").tag, "Codice");
-        assert_eq!(categorize("import os\ndef f():\n    return 1").tag, "Codice");
+        assert_eq!(categorize("fn main() { println!(\"hi\"); }").tag, "Code");
+        assert_eq!(categorize("import os\ndef f():\n    return 1").tag, "Code");
     }
 
     #[test]
     fn long_and_default() {
         let long = "lorem ipsum ".repeat(60);
-        assert_eq!(categorize(&long).tag, "Testo lungo");
-        assert!(!categorize(&long).sensitive); // testo lungo con spazi: non sensibile
-        assert_eq!(categorize("ciao come stai").tag, "Testo");
+        assert_eq!(categorize(&long).tag, "Long text");
+        assert!(!categorize(&long).sensitive); // long text with spaces: not sensitive
+        assert_eq!(categorize("ciao come stai").tag, "Text");
     }
 
     #[test]
@@ -246,5 +246,54 @@ mod tests {
             categorize("test123@example.com").sensitive_kind,
             Some(SK_EMAIL)
         );
+    }
+
+    #[test]
+    fn iban_with_spaces() {
+        // gli IBAN scritti dai siti bancari hanno spazi ogni 4 caratteri
+        let with_spaces = "IT60 X054 2811 1010 0000 0012 3456";
+        let c = categorize(with_spaces);
+        assert_eq!(c.sensitive_kind, Some(SK_IBAN));
+        assert!(c.sensitive);
+    }
+
+    #[test]
+    fn card_with_dashes() {
+        let dashed = "4111-1111-1111-1111";
+        assert_eq!(categorize(dashed).sensitive_kind, Some(SK_CARD));
+    }
+
+    #[test]
+    fn card_too_long_is_not_card() {
+        // 20 cifre non è una carta valida → non sensibile come card
+        let s = "12345678901234567890";
+        assert_ne!(categorize(s).sensitive_kind, Some(SK_CARD));
+    }
+
+    #[test]
+    fn email_with_plus_alias() {
+        let c = categorize("user+inbox@example.com");
+        assert_eq!(c.tag, "Email");
+        assert_eq!(c.sensitive_kind, Some(SK_EMAIL));
+    }
+
+    #[test]
+    fn token_with_underscore_dash() {
+        // chiavi tipo "ghp_xxx" o "sk-ant-..." sono token comuni
+        let c = categorize("ghp_aBcD1234EFgh5678IjKlMnOp");
+        assert_eq!(c.sensitive_kind, Some(SK_TOKEN));
+    }
+
+    #[test]
+    fn token_too_short_is_not_sensitive() {
+        // 15 char con cifre/lettere ma sotto soglia min (20)
+        assert!(!categorize("abc123xyz789def").sensitive);
+    }
+
+    #[test]
+    fn url_with_port_and_query() {
+        let c = categorize("https://example.com:8443/path?q=1&x=2");
+        assert_eq!(c.content_type, "url");
+        assert!(!c.sensitive);
     }
 }

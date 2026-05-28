@@ -69,14 +69,14 @@ export function TagPicker({
               onClose();
             }
           }}
-          placeholder="cerca o crea…"
+          placeholder="search or create…"
           className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
         />
       </div>
 
       <div className="max-h-48 overflow-y-auto py-1">
         {filtered.length === 0 && !canCreate && (
-          <div className="px-3 py-2 text-xs text-zinc-500">Nessun tag</div>
+          <div className="px-3 py-2 text-xs text-zinc-500">No tags</div>
         )}
         {filtered.map(([name, count]) => (
           <button
@@ -98,7 +98,7 @@ export function TagPicker({
             className="flex w-full items-center gap-2 border-t border-zinc-800 px-2.5 py-1.5 text-left text-sm text-emerald-400 hover:bg-zinc-800"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="truncate">Crea "{q.trim()}"</span>
+            <span className="truncate">Create "{q.trim()}"</span>
           </button>
         )}
       </div>

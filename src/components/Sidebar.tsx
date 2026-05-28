@@ -155,7 +155,7 @@ function CategoryWithPinned({
         <SubItem
           active={pinnedActive}
           onClick={() => onSelect({ kind: mainKind, pinned: true })}
-          label="Fissati"
+          label="Pinned"
           count={pinnedCount}
         />
       )}
@@ -479,7 +479,7 @@ export function Sidebar({
                 filter={filter}
                 onSelect={onSelect}
                 icon={<Inbox className="h-4 w-4" />}
-                label="Tutto"
+                label="All"
                 mainCount={totalCount}
                 pinnedCount={pinnedAllCount}
               />
@@ -488,7 +488,7 @@ export function Sidebar({
                 filter={filter}
                 onSelect={onSelect}
                 icon={<Image className="h-4 w-4" />}
-                label="Immagini"
+                label="Images"
                 mainCount={imageCount}
                 pinnedCount={pinnedImageCount}
               />
@@ -497,7 +497,7 @@ export function Sidebar({
                 filter={filter}
                 onSelect={onSelect}
                 icon={<FileText className="h-4 w-4" />}
-                label="File"
+                label="Files"
                 mainCount={fileCount}
                 pinnedCount={pinnedFileCount}
               />
@@ -506,7 +506,7 @@ export function Sidebar({
                 filter={filter}
                 onSelect={onSelect}
                 icon={<Type className="h-4 w-4" />}
-                label="Testo"
+                label="Text"
                 mainCount={textCount}
                 pinnedCount={pinnedTextCount}
               />
@@ -521,7 +521,7 @@ export function Sidebar({
               {pinnedTags.length > 0 && (
                 <div className="flex flex-col gap-0.5">
                   <div className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-zinc-600">
-                    Fissati
+                    Pinned
                   </div>
                   {pinnedTags.map(renderTag)}
                 </div>
@@ -537,8 +537,8 @@ export function Sidebar({
               }
               title={
                 sortBy === "name"
-                  ? "Ordina per più usati"
-                  : "Ordina alfabeticamente"
+                  ? "Sort by most used"
+                  : "Sort alphabetically"
               }
               className="text-zinc-600 hover:text-zinc-300"
             >
@@ -551,7 +551,7 @@ export function Sidebar({
           </div>
                 {otherTags.length === 0 && tags.length === 0 && (
                   <div className="px-2.5 py-1 text-xs text-zinc-600">
-                    nessuna
+                    none yet
                   </div>
                 )}
                 {otherTags.map(renderTag)}

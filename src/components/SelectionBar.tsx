@@ -34,9 +34,7 @@ export function SelectionBar({
 
   return (
     <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-zinc-900/95 px-3 py-2 shadow-md backdrop-blur">
-      <span className="text-sm text-zinc-100">
-        {count} selezionate
-      </span>
+      <span className="text-sm text-zinc-100">{count} selected</span>
       <div className="ml-auto flex items-center gap-1.5">
         <div className="relative">
           <button
@@ -44,7 +42,7 @@ export function SelectionBar({
               setUntagging(false);
               setTagging((v) => !v);
             }}
-            title="Aggiungi tag alle selezionate"
+            title="Add tag to selected"
             className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
           >
             <Tag className="h-3.5 w-3.5" /> +Tag
@@ -65,7 +63,7 @@ export function SelectionBar({
                 setTagging(false);
                 setUntagging((v) => !v);
               }}
-              title="Rimuovi un tag dalle selezionate"
+              title="Remove a tag from selected"
               className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
             >
               <Tag className="h-3.5 w-3.5" /> -Tag
@@ -82,29 +80,29 @@ export function SelectionBar({
         )}
         <button
           onClick={() => onTogglePin(!allPinned)}
-          title={allPinned ? "Despinna selezionate" : "Pinna selezionate"}
+          title={allPinned ? "Unpin selected" : "Pin selected"}
           className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
         >
           {allPinned ? (
             <>
-              <PinOff className="h-3.5 w-3.5" /> Despinna
+              <PinOff className="h-3.5 w-3.5" /> Unpin
             </>
           ) : (
             <>
-              <Pin className="h-3.5 w-3.5" /> {anyPinned ? "Pinna tutte" : "Pinna"}
+              <Pin className="h-3.5 w-3.5" /> {anyPinned ? "Pin all" : "Pin"}
             </>
           )}
         </button>
         <button
           onClick={onDelete}
-          title="Elimina selezionate"
+          title="Delete selected"
           className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
         >
-          <Trash2 className="h-3.5 w-3.5" /> Elimina
+          <Trash2 className="h-3.5 w-3.5" /> Delete
         </button>
         <button
           onClick={onClear}
-          title="Annulla selezione (Esc)"
+          title="Clear selection (Esc)"
           className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
         >
           <X className="h-4 w-4" />

@@ -202,16 +202,16 @@ export function ClipCard({
               onClick={saveEdit}
               className="rounded-md bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-400"
             >
-              Salva
+              Save
             </button>
             <button
               onClick={() => setEditing(false)}
               className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
             >
-              Annulla
+              Cancel
             </button>
             <span className="ml-auto text-[11px] text-zinc-600">
-              Ctrl+Invio per salvare
+              Ctrl+Enter to save
             </span>
           </div>
         </div>
@@ -249,7 +249,7 @@ export function ClipCard({
           })}
           {filePaths.length > 4 && (
             <div className="text-xs text-zinc-500">
-              + altri {filePaths.length - 4}
+              + {filePaths.length - 4} more
             </div>
           )}
         </div>
@@ -262,7 +262,7 @@ export function ClipCard({
           }`}
         >
           {!text ? (
-            "(vuoto)"
+            "(empty)"
           ) : highlightQuery && highlightQuery.trim() && !masked ? (
             splitMatches(text, highlightQuery).map((seg, i) =>
               seg.match ? (
@@ -292,10 +292,10 @@ export function ClipCard({
             <span
               title={
                 hasHtml && hasRtf
-                  ? "Contiene formattazione HTML e RTF"
+                  ? "Contains HTML and RTF formatting"
                   : hasHtml
-                    ? "Contiene formattazione HTML"
-                    : "Contiene formattazione RTF"
+                    ? "Contains HTML formatting"
+                    : "Contains RTF formatting"
               }
               className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300"
             >
@@ -312,12 +312,12 @@ export function ClipCard({
                 value={colorOf(t)}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => onSetTagColor(t, e.target.value)}
-                title="Colore tag"
+                title="Tag color"
                 className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full"
               />
               {t}
               <button
-                title="Rimuovi tag"
+                title="Remove tag"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemoveTag(clip.id, t);
@@ -331,7 +331,7 @@ export function ClipCard({
 
           <div className="relative">
             <button
-              title="Aggiungi tag"
+              title="Add tag"
               onClick={(e) => {
                 e.stopPropagation();
                 setAdding((v) => !v);
@@ -383,7 +383,7 @@ export function ClipCard({
         <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-zinc-900/90 p-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
           {clip.sensitive && (
             <IconButton
-              title={revealed ? "Nascondi" : "Rivela"}
+              title={revealed ? "Hide" : "Reveal"}
               onClick={() => setRevealed((r) => !r)}
             >
               {revealed ? (
@@ -394,7 +394,7 @@ export function ClipCard({
             </IconButton>
           )}
           {!isImage && !isFiles && (
-            <IconButton title="Modifica" onClick={startEdit}>
+            <IconButton title="Edit" onClick={startEdit}>
               <Pencil className="h-4 w-4" />
             </IconButton>
           )}
@@ -403,28 +403,28 @@ export function ClipCard({
               non avrebbe senso */}
           {isFiles && onReveal && filePaths[0] && (
             <IconButton
-              title="Apri posizione"
+              title="Open location"
               onClick={() => onReveal(filePaths[0])}
             >
               <FolderOpen className="h-4 w-4" />
             </IconButton>
           )}
           <IconButton
-            title={hasRich ? "Copia con formattazione" : "Copia"}
+            title={hasRich ? "Copy with formatting" : "Copy"}
             onClick={() => onCopy(clip.id)}
           >
             <Copy className="h-4 w-4" />
           </IconButton>
           {hasRich && (
             <IconButton
-              title="Copia come testo semplice"
+              title="Copy as plain text"
               onClick={() => onCopy(clip.id, true)}
             >
               <Type className="h-4 w-4" />
             </IconButton>
           )}
           <IconButton
-            title={clip.pinned ? "Rimuovi dai fissati" : "Fissa"}
+            title={clip.pinned ? "Unpin" : "Pin"}
             onClick={() => onTogglePin(clip)}
           >
             <Pin
@@ -433,7 +433,7 @@ export function ClipCard({
               }`}
             />
           </IconButton>
-          <IconButton title="Elimina" danger onClick={() => onDelete(clip.id)}>
+          <IconButton title="Delete" danger onClick={() => onDelete(clip.id)}>
             <Trash2 className="h-4 w-4" />
           </IconButton>
         </div>
@@ -450,7 +450,7 @@ export function ClipCard({
             copied ? "scale-100" : "scale-50"
           }`}
         >
-          <Check className="h-3.5 w-3.5" /> Copiato
+          <Check className="h-3.5 w-3.5" /> Copied
         </span>
       </div>
     </div>

@@ -20,20 +20,20 @@ import { ClipCard } from "./ClipCard";
 
 /// Etichetta del gruppo a cui appartiene una clip in base a pin/data.
 function bucketOf(clip: Clip, now: Date): string {
-  if (clip.pinned) return "Fissati";
+  if (clip.pinned) return "Pinned";
   const d = new Date(clip.created_at);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86_400_000);
-  if (d >= today) return "Oggi";
-  if (d >= yesterday) return "Ieri";
-  // inizio settimana = lunedì (dow 0=lun, ..., 6=dom)
+  if (d >= today) return "Today";
+  if (d >= yesterday) return "Yesterday";
+  // start of week = Monday (dow 0=Mon, ..., 6=Sun)
   const dow = (today.getDay() + 6) % 7;
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - dow);
-  if (d >= startOfWeek) return "Questa settimana";
+  if (d >= startOfWeek) return "This week";
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  if (d >= startOfMonth) return "Questo mese";
-  return "Più vecchi";
+  if (d >= startOfMonth) return "This month";
+  return "Older";
 }
 
 /// Wrapper sortable per le card pinnate (usa dnd-kit/sortable).
@@ -187,7 +187,7 @@ export function ClipList({
     return (
       <div className="anim-fade-in flex h-full flex-col items-center justify-center gap-3 text-zinc-600">
         <ClipboardList className="anim-pulse-soft h-10 w-10" />
-        <p className="text-sm">Nessuna clip. Copia qualcosa per iniziare.</p>
+        <p className="text-sm">No clips. Copy something to start.</p>
       </div>
     );
   }

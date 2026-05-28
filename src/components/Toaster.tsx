@@ -87,7 +87,7 @@ function ToastItem({
       <button
         onClick={requestClose}
         className="shrink-0 text-zinc-500 hover:text-zinc-100"
-        title="Chiudi"
+        title="Close"
       >
         <X className="h-3.5 w-3.5" />
       </button>
