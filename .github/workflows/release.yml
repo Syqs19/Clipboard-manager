@@ -41,7 +41,8 @@ jobs:
       - name: Build + bundle (signed)
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # No password secret: the key was generated without one. The
+          # Tauri signer treats the password as optional in that case.
         run: npm run tauri -- build
 
       - name: Generate latest.json (updater manifest)
