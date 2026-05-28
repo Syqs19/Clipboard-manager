@@ -6,6 +6,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  FileText,
   Pencil,
   Pin,
   Plus,
@@ -96,6 +97,17 @@ export function ClipCard({
   const masked = clip.sensitive && !revealed;
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
+  const isFiles = clip.content_type === "files";
+  // per i file, content è un JSON array di path
+  const filePaths: string[] = (() => {
+    if (!isFiles || !clip.content) return [];
+    try {
+      const v = JSON.parse(clip.content);
+      return Array.isArray(v) ? (v as string[]) : [];
+    } catch {
+      return [];
+    }
+  })();
 
   const startEdit = () => {
     setEditValue(clip.content ?? "");
@@ -188,6 +200,31 @@ export function ClipCard({
           draggable={false}
           className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
         />
+      ) : isFiles ? (
+        <div className="flex flex-col gap-1">
+          {filePaths.slice(0, 4).map((p) => {
+            const name = p.split(/[\\/]/).pop() || p;
+            return (
+              <div
+                key={p}
+                className="flex items-center gap-2 text-sm text-zinc-100"
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                <span
+                  className="min-w-0 flex-1 truncate"
+                  title={p}
+                >
+                  {name}
+                </span>
+              </div>
+            );
+          })}
+          {filePaths.length > 4 && (
+            <div className="text-xs text-zinc-500">
+              + altri {filePaths.length - 4}
+            </div>
+          )}
+        </div>
       ) : (
         <p
           className={`line-clamp-3 whitespace-pre-wrap break-words text-sm ${
@@ -285,7 +322,7 @@ export function ClipCard({
               )}
             </IconButton>
           )}
-          {!isImage && (
+          {!isImage && !isFiles && (
             <IconButton title="Modifica" onClick={startEdit}>
               <Pencil className="h-4 w-4" />
             </IconButton>

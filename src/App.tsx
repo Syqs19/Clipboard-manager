@@ -17,8 +17,10 @@ import { ClipList } from "./components/ClipList";
 import { Settings } from "./components/Settings";
 import { ImagePreview } from "./components/ImagePreview";
 import { SelectionBar } from "./components/SelectionBar";
+import { useNotify } from "./components/Toaster";
 
 function App() {
+  const notify = useNotify();
   const [clips, setClips] = useState<Clip[]>([]);
   const [tags, setTags] = useState<[string, number, string | null, boolean][]>(
     [],
@@ -156,10 +158,12 @@ function App() {
   const visible = clips.filter((c) => {
     if (filter.kind === "pinned") return c.pinned;
     if (filter.kind === "images") return c.content_type === "image";
+    if (filter.kind === "files") return c.content_type === "files";
     if (filter.kind === "tag") return c.tags.includes(filter.name);
     return true;
   });
   const imageCount = clips.filter((c) => c.content_type === "image").length;
+  const fileCount = clips.filter((c) => c.content_type === "files").length;
 
   // selezione corrente (per la navigazione da tastiera)
   const sel = visible.length ? Math.min(selectedIndex, visible.length - 1) : 0;
@@ -203,8 +207,9 @@ function App() {
     try {
       await api.renameTag(oldName, newName);
       reload();
+      notify(`Tag rinominato in "${newName}"`, "success");
     } catch (e) {
-      alert(`Impossibile rinominare: ${e}`);
+      notify(`Impossibile rinominare: ${e}`, "error");
     }
   };
 
@@ -282,6 +287,7 @@ function App() {
         tags={tags}
         pinnedCount={pinnedCount}
         imageCount={imageCount}
+        fileCount={fileCount}
         totalCount={clips.length}
         onSetTagColor={handleSetTagColor}
         onSetTagPinned={handleSetTagPinned}

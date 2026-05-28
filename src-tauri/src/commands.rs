@@ -52,6 +52,15 @@ fn write_clip_to_clipboard(db: &Db, id: i64) -> Result<(), String> {
             })
             .map_err(|e| e.to_string())?;
         }
+    } else if clip.content_type == "files" {
+        // CF_HDROP per consentire all'utente di incollare i file in Esplora risorse
+        if let Some(json) = clip.content {
+            let paths: Vec<String> =
+                serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if !crate::win_clipboard::write_file_drop(&paths) {
+                return Err("Impossibile scrivere la lista di file nella clipboard".into());
+            }
+        }
     } else if let Some(content) = clip.content {
         cb.set_text(content).map_err(|e| e.to_string())?;
     }

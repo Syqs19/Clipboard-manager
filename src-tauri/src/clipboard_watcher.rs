@@ -51,7 +51,11 @@ impl Handler {
         if win_clipboard::should_skip() {
             return Ok(());
         }
-        // Priorità al testo; se non c'è, prova l'immagine.
+        // Priorità ai file (CF_HDROP), poi testo, poi immagine.
+        let files = win_clipboard::read_file_drop();
+        if !files.is_empty() {
+            return self.capture_files(files);
+        }
         if let Ok(mut text) = self.clipboard.get_text() {
             if let Some(stripped) = text.strip_prefix('\u{feff}') {
                 text = stripped.to_string();
@@ -63,6 +67,39 @@ impl Handler {
         if let Ok(img) = self.clipboard.get_image() {
             return self.capture_image(img);
         }
+        Ok(())
+    }
+
+    fn capture_files(&mut self, files: Vec<String>) -> Result<(), String> {
+        // serializza la lista in JSON e usala sia come content sia per l'hash
+        let json = serde_json::to_string(&files).map_err(|e| e.to_string())?;
+        let hash = db::content_hash(&json);
+        if self.last_hash.as_deref() == Some(hash.as_str()) {
+            return Ok(());
+        }
+        self.last_hash = Some(hash.clone());
+
+        let preview = if files.len() == 1 {
+            files[0].clone()
+        } else {
+            format!("{} file ({})", files.len(), files[0])
+        };
+        let new = NewClip {
+            content: Some(json),
+            content_type: "files".into(),
+            image_path: None,
+            preview,
+            created_at: db::now_millis(),
+            char_count: files.len() as i64,
+            sensitive: false,
+            sensitive_kind: None,
+            hash,
+        };
+        let id = self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
+        if let Ok(tag_id) = self.db.get_or_create_tag("File", None, true) {
+            let _ = self.db.attach_tag(id, tag_id);
+        }
+        self.finish(id);
         Ok(())
     }
 

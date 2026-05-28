@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { ArrowDownAZ, ArrowDownWideNarrow, Clock, Pin, Image, Star } from "lucide-react";
+import {
+  ArrowDownAZ,
+  ArrowDownWideNarrow,
+  Clock,
+  FileText,
+  Image,
+  Pin,
+  Star,
+} from "lucide-react";
 import { tagColor } from "../lib/format";
 
 export type Filter =
   | { kind: "all" }
   | { kind: "pinned" }
   | { kind: "images" }
+  | { kind: "files" }
   | { kind: "tag"; name: string };
 
 function sameFilter(a: Filter, b: Filter): boolean {
@@ -143,6 +152,7 @@ export function Sidebar({
   tags,
   pinnedCount,
   imageCount,
+  fileCount,
   totalCount,
   onSetTagColor,
   onSetTagPinned,
@@ -153,6 +163,7 @@ export function Sidebar({
   tags: [string, number, string | null, boolean][];
   pinnedCount: number;
   imageCount: number;
+  fileCount: number;
   totalCount: number;
   onSetTagColor: (name: string, color: string) => void;
   onSetTagPinned: (name: string, pinned: boolean) => void;
@@ -202,6 +213,13 @@ export function Sidebar({
           icon={<Image className="h-4 w-4" />}
           label="Immagini"
           count={imageCount}
+        />
+        <Item
+          active={sameFilter(filter, { kind: "files" })}
+          onClick={() => onSelect({ kind: "files" })}
+          icon={<FileText className="h-4 w-4" />}
+          label="File"
+          count={fileCount}
         />
         <Item
           active={sameFilter(filter, { kind: "all" })}

@@ -32,7 +32,9 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
   per riordinare. Persistito su `pinned_order` nel DB.
 - ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
   sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
-- ☐ **Più tipi di contenuto**: file copiati, HTML/RTF.
+- ⏳ **Più tipi di contenuto**: **file copiati ✅** (CF_HDROP via WinAPI, lettura
+  e scrittura nella clipboard, tag automatico "File", sezione dedicata in
+  sidebar). HTML/RTF ancora da fare.
 - ☐ **"Incolla come testo semplice"**.
 - ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
   Questo mese / Più vecchi). Header sottili tra i gruppi.
@@ -61,7 +63,9 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
   delete_expired_sensitive_kinds, backfill, rename_tag, bulk_remove_tag, set_tag_pinned,
   reorder_pinned, wipe_all, image_paths_for, thumbnail roundtrip e aspect ratio,
   sensitive_kind per tipo). Watcher/commands ancora da coprire.
-- ☐ Errori mostrati in UI invece che solo in console.
+- ✅ **Errori in UI**: sistema toast (ToasterProvider + useNotify) con tipi
+  error/success/info, auto-dismiss 4.5s, chiusura manuale. Usato per la
+  rinomina tag; estendibile a ogni handler async.
 
 ---
 
@@ -82,10 +86,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Tag picker condiviso + tag fissati nella sidebar
 - ✅ Tag polish: rinomina (doppio click), rimuovi tag in bulk, ordina per più usati
 - ✅ Test backend ampliati (28 unit test)
+- ✅ File copiati dall'Explorer (CF_HDROP read/write)
+- ✅ Sistema toast per gli errori in UI
 
 ### Prossimi candidati (non ancora fatti)
 - Polish & motion (pass animazioni dedicato)
-- File copiati dall'Explorer (CF_HDROP) / HTML/RTF + incolla come testo semplice
+- HTML/RTF + "Incolla come testo semplice"
 - Cifratura DB (SQLCipher)
-- Errori mostrati in UI invece che solo console
 - README + onboarding al primo avvio
