@@ -216,4 +216,35 @@ mod tests {
         assert!(!categorize(&long).sensitive); // testo lungo con spazi: non sensibile
         assert_eq!(categorize("ciao come stai").tag, "Testo");
     }
+
+    #[test]
+    fn sensitive_kind_is_set_per_type() {
+        assert_eq!(categorize("a@b.it").sensitive_kind, Some(SK_EMAIL));
+        assert_eq!(
+            categorize("IT60X0542811101000000123456").sensitive_kind,
+            Some(SK_IBAN)
+        );
+        assert_eq!(
+            categorize("4111 1111 1111 1111").sensitive_kind,
+            Some(SK_CARD)
+        );
+        assert_eq!(
+            categorize("sk_live_4eC39HqLyjWDarjtT1zdp7dc").sensitive_kind,
+            Some(SK_TOKEN)
+        );
+        assert_eq!(categorize("ciao mondo").sensitive_kind, None);
+        assert_eq!(categorize("https://example.com").sensitive_kind, None);
+    }
+
+    #[test]
+    fn sensitive_kind_takes_priority_order() {
+        // IBAN ha priorità su token (entrambi potrebbero matchare strutture lunghe)
+        let iban = "IT60X0542811101000000123456";
+        assert_eq!(categorize(iban).sensitive_kind, Some(SK_IBAN));
+        // email ha priorità sugli altri
+        assert_eq!(
+            categorize("test123@example.com").sensitive_kind,
+            Some(SK_EMAIL)
+        );
+    }
 }

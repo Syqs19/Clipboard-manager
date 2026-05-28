@@ -57,7 +57,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ## 🧰 Qualità codice
 
-- ☐ Più test (watcher / commands), gestione errori mostrata in UI invece che solo console.
+- ⏳ **Più test** — copertura DB/categorizer/images da 11 → **28 test** (delete_clips,
+  delete_expired_sensitive_kinds, backfill, rename_tag, bulk_remove_tag, set_tag_pinned,
+  reorder_pinned, wipe_all, image_paths_for, thumbnail roundtrip e aspect ratio,
+  sensitive_kind per tipo). Watcher/commands ancora da coprire.
+- ☐ Errori mostrati in UI invece che solo in console.
 
 ---
 
@@ -76,8 +80,12 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Export / Import JSON con dialog nativo (merge / replace)
 - ✅ Miniature ridotte per le immagini (resize bilineare + backfill)
 - ✅ Tag picker condiviso + tag fissati nella sidebar
+- ✅ Tag polish: rinomina (doppio click), rimuovi tag in bulk, ordina per più usati
+- ✅ Test backend ampliati (28 unit test)
 
 ### Prossimi candidati (non ancora fatti)
 - Polish & motion (pass animazioni dedicato)
-- Rinomina tag / rimuovi tag da selezione / sort tag per più usati
+- File copiati dall'Explorer (CF_HDROP) / HTML/RTF + incolla come testo semplice
+- Cifratura DB (SQLCipher)
+- Errori mostrati in UI invece che solo console
 - README + onboarding al primo avvio

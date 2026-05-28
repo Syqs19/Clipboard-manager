@@ -343,6 +343,22 @@ pub fn set_tag_pinned(db: State<Database>, name: String, pinned: bool) -> Result
     db.set_tag_pinned(name.trim(), pinned).map_err(|e| e.to_string())
 }
 
+/// Rinomina un tag (errore se il nuovo nome è già usato).
+#[tauri::command]
+pub fn rename_tag(db: State<Database>, old: String, new: String) -> Result<(), String> {
+    db.rename_tag(&old, &new)
+}
+
+/// Rimuove un tag da più clip in un colpo.
+#[tauri::command]
+pub fn bulk_remove_tag(
+    db: State<Database>,
+    ids: Vec<i64>,
+    name: String,
+) -> Result<(), String> {
+    db.bulk_remove_tag(&ids, name.trim()).map_err(|e| e.to_string())
+}
+
 /// Imposta il colore di un tag.
 #[tauri::command]
 pub fn set_tag_color(db: State<Database>, name: String, color: String) -> Result<(), String> {

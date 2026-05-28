@@ -253,6 +253,8 @@ pub fn run() {
             commands::export_history,
             commands::import_history,
             commands::set_tag_pinned,
+            commands::rename_tag,
+            commands::bulk_remove_tag,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -77,6 +77,71 @@ pub fn thumb_path_for(image_path: &Path) -> std::path::PathBuf {
     parent.join(format!("{stem}.thumb.png"))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn tmp(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("clipmgr-test-{name}"))
+    }
+
+    fn solid_rgba(w: u32, h: u32, color: [u8; 4]) -> Vec<u8> {
+        let mut v = Vec::with_capacity((w * h * 4) as usize);
+        for _ in 0..(w * h) {
+            v.extend_from_slice(&color);
+        }
+        v
+    }
+
+    #[test]
+    fn save_and_load_png_roundtrip() {
+        let path = tmp("roundtrip.png");
+        let rgba = solid_rgba(4, 3, [10, 20, 30, 255]);
+        save_rgba_png(&path, 4, 3, &rgba).unwrap();
+        let (w, h, out) = load_png_rgba(&path).unwrap();
+        assert_eq!((w, h), (4, 3));
+        assert_eq!(out, rgba);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn thumbnail_keeps_aspect_ratio_and_max_side() {
+        let src = tmp("thumb-src.png");
+        let dst = tmp("thumb-dst.png");
+        // 400x200 → max_side 100 → 100x50
+        save_rgba_png(&src, 400, 200, &solid_rgba(400, 200, [50, 60, 70, 255])).unwrap();
+        save_thumbnail(&src, &dst, 100).unwrap();
+        let (w, h, _) = load_png_rgba(&dst).unwrap();
+        assert_eq!(w, 100);
+        assert_eq!(h, 50);
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&dst).ok();
+    }
+
+    #[test]
+    fn thumbnail_smaller_than_max_keeps_size() {
+        let src = tmp("thumb-small-src.png");
+        let dst = tmp("thumb-small-dst.png");
+        save_rgba_png(&src, 50, 30, &solid_rgba(50, 30, [200, 200, 200, 255])).unwrap();
+        save_thumbnail(&src, &dst, 100).unwrap();
+        let (w, h, _) = load_png_rgba(&dst).unwrap();
+        assert_eq!((w, h), (50, 30));
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&dst).ok();
+    }
+
+    #[test]
+    fn thumb_path_for_replaces_extension() {
+        let p = Path::new("X:/data/images/abcdef.png");
+        let t = thumb_path_for(p);
+        assert_eq!(
+            t.file_name().unwrap().to_string_lossy(),
+            "abcdef.thumb.png"
+        );
+    }
+}
+
 /// Legge un PNG e ritorna (width, height, rgba8). Converte a RGBA se serve.
 pub fn load_png_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let file = File::open(path).map_err(|e| e.to_string())?;

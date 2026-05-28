@@ -3,29 +3,34 @@ import { Pin, PinOff, Tag, Trash2, X } from "lucide-react";
 import { TagPicker } from "./TagPicker";
 
 /// Barra di azioni in cima alla lista quando l'utente ha selezionato 1+ clip
-/// con Ctrl/Shift+click. Elimina, pinna/despinna, aggiungi tag, deseleziona.
+/// con Ctrl/Shift+click. Elimina, pinna/despinna, aggiungi/rimuovi tag, deseleziona.
 export function SelectionBar({
   count,
   anyPinned,
   allPinned,
   allTags,
+  selectedTagsInBulk,
   colorOf,
   onClear,
   onDelete,
   onTogglePin,
   onAddTag,
+  onRemoveTag,
 }: {
   count: number;
   anyPinned: boolean;
   allPinned: boolean;
   allTags: [string, number, string | null, boolean][];
+  selectedTagsInBulk: string[];
   colorOf: (name: string) => string;
   onClear: () => void;
   onDelete: () => void;
   onTogglePin: (pin: boolean) => void;
   onAddTag: (name: string) => void;
+  onRemoveTag: (name: string) => void;
 }) {
   const [tagging, setTagging] = useState(false);
+  const [untagging, setUntagging] = useState(false);
 
   return (
     <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-zinc-900/95 px-3 py-2 shadow-md backdrop-blur">
@@ -35,11 +40,14 @@ export function SelectionBar({
       <div className="ml-auto flex items-center gap-1.5">
         <div className="relative">
           <button
-            onClick={() => setTagging((v) => !v)}
+            onClick={() => {
+              setUntagging(false);
+              setTagging((v) => !v);
+            }}
             title="Aggiungi tag alle selezionate"
             className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
           >
-            <Tag className="h-3.5 w-3.5" /> Tag
+            <Tag className="h-3.5 w-3.5" /> +Tag
           </button>
           {tagging && (
             <TagPicker
@@ -50,6 +58,28 @@ export function SelectionBar({
             />
           )}
         </div>
+        {selectedTagsInBulk.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => {
+                setTagging(false);
+                setUntagging((v) => !v);
+              }}
+              title="Rimuovi un tag dalle selezionate"
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
+            >
+              <Tag className="h-3.5 w-3.5" /> -Tag
+            </button>
+            {untagging && (
+              <TagPicker
+                tags={allTags.filter(([n]) => selectedTagsInBulk.includes(n))}
+                colorOf={colorOf}
+                onPick={(name) => onRemoveTag(name)}
+                onClose={() => setUntagging(false)}
+              />
+            )}
+          </div>
+        )}
         <button
           onClick={() => onTogglePin(!allPinned)}
           title={allPinned ? "Despinna selezionate" : "Pinna selezionate"}

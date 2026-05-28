@@ -199,6 +199,14 @@ function App() {
     await api.setTagPinned(name, pinned);
     reload();
   };
+  const handleRenameTag = async (oldName: string, newName: string) => {
+    try {
+      await api.renameTag(oldName, newName);
+      reload();
+    } catch (e) {
+      alert(`Impossibile rinominare: ${e}`);
+    }
+  };
 
   // multi-selezione: Ctrl/Cmd+click toggle, Shift+click range
   const onCardBulkClick = (clipIndex: number, e: React.MouseEvent) => {
@@ -245,11 +253,20 @@ function App() {
     await api.bulkAddTag(ids, name);
     reload();
   };
+  const removeTagSelected = async (name: string) => {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    await api.bulkRemoveTag(ids, name);
+    reload();
+  };
 
   // stato pinned aggregato della selezione (per il bottone Pinna/Despinna)
   const selectedClips = clips.filter((c) => selectedIds.has(c.id));
   const anyPinned = selectedClips.some((c) => c.pinned);
   const allPinned = selectedClips.length > 0 && selectedClips.every((c) => c.pinned);
+  const selectedTagsInBulk = Array.from(
+    new Set(selectedClips.flatMap((c) => c.tags)),
+  );
 
   // colore di un tag: override salvato oppure deterministico dal nome
   const colorOf = (name: string) =>
@@ -268,6 +285,7 @@ function App() {
         totalCount={clips.length}
         onSetTagColor={handleSetTagColor}
         onSetTagPinned={handleSetTagPinned}
+        onRenameTag={handleRenameTag}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-zinc-800 p-3">
@@ -289,11 +307,13 @@ function App() {
               anyPinned={anyPinned}
               allPinned={allPinned}
               allTags={tags}
+              selectedTagsInBulk={selectedTagsInBulk}
               colorOf={colorOf}
               onClear={clearSelection}
               onDelete={deleteSelected}
               onTogglePin={togglePinSelected}
               onAddTag={addTagSelected}
+              onRemoveTag={removeTagSelected}
             />
           )}
           <ClipList

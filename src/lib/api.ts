@@ -36,6 +36,10 @@ export const api = {
     invoke<[string, number, string | null, boolean][]>("list_tags"),
   setTagPinned: (name: string, pinned: boolean) =>
     invoke<void>("set_tag_pinned", { name, pinned }),
+  renameTag: (old: string, newName: string) =>
+    invoke<void>("rename_tag", { old, new: newName }),
+  bulkRemoveTag: (ids: number[], name: string) =>
+    invoke<void>("bulk_remove_tag", { ids, name }),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),

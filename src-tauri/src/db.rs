@@ -449,6 +449,53 @@ impl Db {
         rows.collect()
     }
 
+    /// Rinomina un tag. Errore se il nuovo nome è vuoto o già usato da un altro tag.
+    pub fn rename_tag(&self, old: &str, new: &str) -> Result<(), String> {
+        let new = new.trim();
+        let old = old.trim();
+        if new.is_empty() {
+            return Err("nome nuovo vuoto".into());
+        }
+        if new == old {
+            return Ok(());
+        }
+        let conn = self.conn.lock().unwrap();
+        let exists: Option<i64> = conn
+            .query_row("SELECT id FROM tags WHERE name = ?1", params![new], |r| r.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if exists.is_some() {
+            return Err(format!("esiste già un tag chiamato '{new}'"));
+        }
+        conn.execute(
+            "UPDATE tags SET name = ?2 WHERE name = ?1",
+            params![old, new],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Rimuove un tag (per nome) da più clip in un colpo.
+    pub fn bulk_remove_tag(&self, ids: &[i64], name: &str) -> rusqlite::Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let placeholders = std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(",");
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "DELETE FROM clip_tags
+             WHERE clip_id IN ({placeholders})
+               AND tag_id = (SELECT id FROM tags WHERE name = ?)"
+        );
+        let mut p: Vec<&dyn rusqlite::ToSql> = ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
+        p.push(&name);
+        conn.execute(&sql, rusqlite::params_from_iter(p.iter().copied()))?;
+        Ok(())
+    }
+
     /// Fissa/sfissa un tag nella sidebar.
     pub fn set_tag_pinned(&self, name: &str, pinned: bool) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -629,6 +676,180 @@ mod tests {
             counts,
             vec![("Codice".to_string(), 1, Some("#888".to_string()), false)]
         );
+    }
+
+    fn new_sensitive(content: &str, kind: &str, ts: i64) -> NewClip {
+        NewClip {
+            content: Some(content.to_string()),
+            content_type: "text".into(),
+            image_path: None,
+            preview: content.chars().take(80).collect(),
+            created_at: ts,
+            char_count: content.chars().count() as i64,
+            sensitive: true,
+            sensitive_kind: Some(kind.to_string()),
+            hash: content_hash(content),
+        }
+    }
+
+    #[test]
+    fn delete_clips_removes_multiple() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("a", 1)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("b", 2)).unwrap();
+        let c = db.insert_or_bump_clip(&new_text("c", 3)).unwrap();
+        let removed = db.delete_clips(&[a, c]).unwrap();
+        assert_eq!(removed, 2);
+        let left = db.list_recent(10).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, b);
+    }
+
+    #[test]
+    fn delete_by_hash_skips_pinned() {
+        let db = Db::open_in_memory().unwrap();
+        let p = db.insert_or_bump_clip(&new_text("keep", 1)).unwrap();
+        db.set_pinned(p, true).unwrap();
+        let n = db.delete_by_hash_if_unpinned(&content_hash("keep")).unwrap();
+        assert_eq!(n, 0); // pinnato, non rimosso
+        let _u = db.insert_or_bump_clip(&new_text("drop", 2)).unwrap();
+        let n2 = db.delete_by_hash_if_unpinned(&content_hash("drop")).unwrap();
+        assert_eq!(n2, 1);
+    }
+
+    #[test]
+    fn delete_expired_sensitive_kinds_filters_and_skips_pinned() {
+        let db = Db::open_in_memory().unwrap();
+        let old_email = db
+            .insert_or_bump_clip(&new_sensitive("a@b.it", "email", 100))
+            .unwrap();
+        let _old_iban = db
+            .insert_or_bump_clip(&new_sensitive("IT60X0542811101000000123456", "iban", 100))
+            .unwrap();
+        let pinned_email = db
+            .insert_or_bump_clip(&new_sensitive("c@d.it", "email", 100))
+            .unwrap();
+        db.set_pinned(pinned_email, true).unwrap();
+        // cutoff > 100 → tutte le clip "vecchie" sono scadute
+        let n = db.delete_expired_sensitive_kinds(200, &["email"]).unwrap();
+        assert_eq!(n, 1); // solo old_email; iban escluso per kind, pinned_email escluso per pin
+        assert!(db.get_clip(old_email).unwrap().is_none());
+        assert!(db.get_clip(pinned_email).unwrap().is_some());
+    }
+
+    #[test]
+    fn delete_expired_sensitive_kinds_empty_list_noop() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_or_bump_clip(&new_sensitive("x@y.it", "email", 1))
+            .unwrap();
+        let n = db.delete_expired_sensitive_kinds(999, &[]).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(db.list_recent(10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn backfill_sensitive_kinds_fills_legacy_rows() {
+        let db = Db::open_in_memory().unwrap();
+        // simula clip pre-migrazione: sensitive=1 ma sensitive_kind=NULL
+        let clip = NewClip {
+            sensitive_kind: None,
+            ..new_sensitive("legacy@x.it", "ignored", 1)
+        };
+        db.insert_or_bump_clip(&clip).unwrap();
+        // force NULL in DB
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute("UPDATE clips SET sensitive_kind = NULL", [])
+                .unwrap();
+        }
+        let n = db.backfill_sensitive_kinds().unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn rename_tag_renames_or_errors_on_conflict() {
+        let db = Db::open_in_memory().unwrap();
+        db.get_or_create_tag("OldName", None, false).unwrap();
+        db.get_or_create_tag("Other", None, false).unwrap();
+        db.rename_tag("OldName", "NewName").unwrap();
+        // conflitto
+        assert!(db.rename_tag("Other", "NewName").is_err());
+    }
+
+    #[test]
+    fn set_tag_pinned_toggles() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db.insert_or_bump_clip(&new_text("hi", 1)).unwrap();
+        let tag = db.get_or_create_tag("T", None, false).unwrap();
+        db.attach_tag(id, tag).unwrap();
+        db.set_tag_pinned("T", true).unwrap();
+        let counts = db.list_tags_with_counts().unwrap();
+        assert_eq!(counts[0].3, true); // pinned
+        db.set_tag_pinned("T", false).unwrap();
+        assert_eq!(db.list_tags_with_counts().unwrap()[0].3, false);
+    }
+
+    #[test]
+    fn bulk_remove_tag_unties_clips() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("a", 1)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("b", 2)).unwrap();
+        let tag = db.get_or_create_tag("Z", None, false).unwrap();
+        db.attach_tag(a, tag).unwrap();
+        db.attach_tag(b, tag).unwrap();
+        db.bulk_remove_tag(&[a, b], "Z").unwrap();
+        let clips = db.list_recent(10).unwrap();
+        for c in clips {
+            assert!(c.tags.is_empty());
+        }
+    }
+
+    #[test]
+    fn reorder_pinned_assigns_order() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("a", 1)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("b", 2)).unwrap();
+        let c = db.insert_or_bump_clip(&new_text("c", 3)).unwrap();
+        for id in [a, b, c] {
+            db.set_pinned(id, true).unwrap();
+        }
+        db.reorder_pinned(&[c, a, b]).unwrap();
+        let clips = db.list_recent(10).unwrap();
+        // pinnati ordinati per pinned_order asc
+        assert_eq!(clips[0].id, c);
+        assert_eq!(clips[1].id, a);
+        assert_eq!(clips[2].id, b);
+    }
+
+    #[test]
+    fn wipe_all_clears_everything() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db.insert_or_bump_clip(&new_text("x", 1)).unwrap();
+        let tag = db.get_or_create_tag("T", None, false).unwrap();
+        db.attach_tag(id, tag).unwrap();
+        db.wipe_all().unwrap();
+        assert_eq!(db.list_recent(10).unwrap().len(), 0);
+        assert_eq!(db.list_all_tags().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn image_paths_for_returns_only_existing_images() {
+        let db = Db::open_in_memory().unwrap();
+        let _txt = db.insert_or_bump_clip(&new_text("no-img", 1)).unwrap();
+        let with_img = NewClip {
+            content: None,
+            content_type: "image".into(),
+            image_path: Some("X:/tmp/abc.png".into()),
+            preview: "Immagine".into(),
+            created_at: 2,
+            char_count: 0,
+            sensitive: false,
+            sensitive_kind: None,
+            hash: "h-img".into(),
+        };
+        let img_id = db.insert_or_bump_clip(&with_img).unwrap();
+        let paths = db.image_paths_for(&[img_id]).unwrap();
+        assert_eq!(paths, vec!["X:/tmp/abc.png".to_string()]);
     }
 
     #[test]
