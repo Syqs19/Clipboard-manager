@@ -155,15 +155,43 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const isTextLike = (t: string) => t === "text" || t === "url";
+  const typeMatches = (c: Clip, kind: Filter["kind"]) => {
+    switch (kind) {
+      case "all":
+        return true;
+      case "images":
+        return c.content_type === "image";
+      case "files":
+        return c.content_type === "files";
+      case "text":
+        return isTextLike(c.content_type);
+      case "tag":
+        return false; // gestito a parte
+    }
+  };
   const visible = clips.filter((c) => {
-    if (filter.kind === "pinned") return c.pinned;
-    if (filter.kind === "images") return c.content_type === "image";
-    if (filter.kind === "files") return c.content_type === "files";
     if (filter.kind === "tag") return c.tags.includes(filter.name);
-    return true;
+    if (!typeMatches(c, filter.kind)) return false;
+    // categoria principale: tutto (fissati inclusi, fissati restano in cima
+    // grazie all'ordinamento del backend). Sub-voce "Fissati": solo fissati.
+    return filter.pinned ? c.pinned : true;
   });
+  // count categoria principale = tutto del tipo; sub-voce = solo fissati
+  const allCount = clips.length;
   const imageCount = clips.filter((c) => c.content_type === "image").length;
   const fileCount = clips.filter((c) => c.content_type === "files").length;
+  const textCount = clips.filter((c) => isTextLike(c.content_type)).length;
+  const pinnedAllCount = clips.filter((c) => c.pinned).length;
+  const pinnedImageCount = clips.filter(
+    (c) => c.content_type === "image" && c.pinned,
+  ).length;
+  const pinnedFileCount = clips.filter(
+    (c) => c.content_type === "files" && c.pinned,
+  ).length;
+  const pinnedTextCount = clips.filter(
+    (c) => isTextLike(c.content_type) && c.pinned,
+  ).length;
 
   // selezione corrente (per la navigazione da tastiera)
   const sel = visible.length ? Math.min(selectedIndex, visible.length - 1) : 0;
@@ -284,18 +312,20 @@ function App() {
   const colorOf = (name: string) =>
     tagColor(name, tags.find((t) => t[0] === name)?.[2] ?? null);
 
-  const pinnedCount = clips.filter((c) => c.pinned).length;
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-900 text-zinc-100">
       <Sidebar
         filter={filter}
         onSelect={setFilter}
         tags={tags}
-        pinnedCount={pinnedCount}
         imageCount={imageCount}
         fileCount={fileCount}
-        totalCount={clips.length}
+        textCount={textCount}
+        totalCount={allCount}
+        pinnedAllCount={pinnedAllCount}
+        pinnedImageCount={pinnedImageCount}
+        pinnedFileCount={pinnedFileCount}
+        pinnedTextCount={pinnedTextCount}
         onSetTagColor={handleSetTagColor}
         onSetTagPinned={handleSetTagPinned}
         onRenameTag={handleRenameTag}

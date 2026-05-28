@@ -160,13 +160,18 @@ export function ClipCard({
     <div
       ref={rootRef}
       onClick={handleCardClick}
-      className={`group relative rounded-lg border bg-zinc-800/30 transition-all ${
+      // viewTransitionName univoco per ogni clip: il browser anima le
+      // card che cambiano posizione (riordino drag&drop dei fissati).
+      style={{ viewTransitionName: `clip-${clip.id}` }}
+      className={`card-lift group relative rounded-lg border bg-zinc-800/30 ${
+        adding ? "z-30" : ""
+      } ${
         keyHint !== undefined ? "py-3 pl-8 pr-3" : "p-3"
       } ${
         editing ? "" : "cursor-pointer hover:bg-zinc-800/60"
       } ${
         selectedForBulk
-          ? "border-emerald-500/70 bg-emerald-500/5 ring-1 ring-emerald-500/40"
+          ? "scale-[0.98] border-emerald-500/70 bg-emerald-500/5 ring-1 ring-emerald-500/40"
           : copied
             ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
             : selected
@@ -357,13 +362,16 @@ export function ClipCard({
         </div>
       )}
 
-      {/* checkbox in modalità selezione */}
+      {/* checkbox in modalità selezione: piccolo bounce al toggle */}
       {selectionMode && !editing && (
         <div className="absolute right-2 top-2 text-emerald-400">
           {selectedForBulk ? (
-            <CheckCircle2 className="h-5 w-5 fill-emerald-500/20" />
+            <CheckCircle2
+              key="checked"
+              className="anim-pop h-5 w-5 fill-emerald-500/20"
+            />
           ) : (
-            <Circle className="h-5 w-5 text-zinc-500" />
+            <Circle key="unchecked" className="h-5 w-5 text-zinc-500" />
           )}
         </div>
       )}
@@ -429,15 +437,15 @@ export function ClipCard({
         </div>
       )}
 
-      {/* overlay "Copiato" */}
+      {/* overlay "Copiato" — easing back-out per un'entrata "viva" senza essere vistosa */}
       <div
         className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
           copied ? "opacity-100" : "opacity-0"
         }`}
       >
         <span
-          className={`flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white shadow-lg transition-transform duration-200 ${
-            copied ? "scale-100" : "scale-90"
+          className={`ease-back-out flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white shadow-lg transition-transform duration-500 ${
+            copied ? "scale-100" : "scale-50"
           }`}
         >
           <Check className="h-3.5 w-3.5" /> Copiato

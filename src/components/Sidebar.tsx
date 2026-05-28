@@ -1,36 +1,45 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   ArrowDownWideNarrow,
-  Clock,
   FileText,
   Image,
+  Inbox,
   Pin,
   Star,
+  Type,
 } from "lucide-react";
 import { tagColor } from "../lib/format";
 
+/// Categorie principali della sidebar.
+export type MainKind = "all" | "images" | "files" | "text";
+
 export type Filter =
-  | { kind: "all" }
-  | { kind: "pinned" }
-  | { kind: "images" }
-  | { kind: "files" }
+  | { kind: MainKind; pinned?: boolean }
   | { kind: "tag"; name: string };
 
 function sameFilter(a: Filter, b: Filter): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "tag" && b.kind === "tag") return a.name === b.name;
+  if (a.kind !== "tag" && b.kind !== "tag") {
+    return Boolean(a.pinned) === Boolean(b.pinned);
+  }
   return true;
 }
 
 function Item({
   active,
+  sectionActive,
   onClick,
   icon,
   label,
   count,
 }: {
+  /** Item evidenziato con sfondo (fuoco visivo). */
   active: boolean;
+  /** L'ActiveBar si posiziona qui (di default coincide con `active`,
+   *  ma può restare sulla categoria padre anche se è attiva una sub-voce). */
+  sectionActive?: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
@@ -38,6 +47,7 @@ function Item({
 }) {
   return (
     <button
+      data-active={(sectionActive ?? active) ? "true" : undefined}
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
         active
@@ -51,6 +61,131 @@ function Item({
         <span className="text-xs text-zinc-500">{count}</span>
       )}
     </button>
+  );
+}
+
+/// Voce indentata per filtri secondari (es. "Fissati" dentro una categoria).
+/// Disegna una piccola guida ad L verde che la collega visivamente alla
+/// categoria padre sopra: linea verticale dall'alto fino a metà altezza +
+/// trattino orizzontale verso l'icona.
+function SubItem({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex w-full items-center gap-2 rounded-md py-1 pl-9 pr-2.5 text-xs transition-colors ${
+        active
+          ? "bg-zinc-700/40 text-zinc-100"
+          : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300"
+      }`}
+    >
+      {/* guida ad L verde, visibile SOLO quando la sub-voce è attiva.
+          Stesso spessore della ActiveBar (w-0.5 = 2px), stessa x (-left-1)
+          per fare da continuazione naturale della barra verticale. */}
+      {active && (
+        <>
+          <span
+            aria-hidden
+            className="guide-grow-y pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400"
+          />
+          <span
+            aria-hidden
+            className="guide-grow-x pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-emerald-400"
+          />
+        </>
+      )}
+      <Pin className="h-3 w-3 shrink-0 text-amber-400/80" />
+      <span className="flex-1 truncate text-left">{label}</span>
+      {count !== undefined && (
+        <span className="text-[10px] text-zinc-600">{count}</span>
+      )}
+    </button>
+  );
+}
+
+/// Item categoria + sub-voce "Fissati" che appare solo quando la
+/// categoria è attiva e ha almeno una clip fissata.
+function CategoryWithPinned({
+  mainKind,
+  filter,
+  onSelect,
+  icon,
+  label,
+  mainCount,
+  pinnedCount,
+}: {
+  mainKind: MainKind;
+  filter: Filter;
+  onSelect: (f: Filter) => void;
+  icon: React.ReactNode;
+  label: string;
+  mainCount: number;
+  pinnedCount: number;
+}) {
+  const sectionActive = filter.kind === mainKind;
+  const mainActive = sectionActive && !filter.pinned;
+  const pinnedActive = sectionActive && filter.pinned === true;
+  return (
+    <>
+      <Item
+        active={mainActive}
+        sectionActive={sectionActive}
+        onClick={() => onSelect({ kind: mainKind })}
+        icon={icon}
+        label={label}
+        count={mainCount}
+      />
+      {sectionActive && (
+        <SubItem
+          active={pinnedActive}
+          onClick={() => onSelect({ kind: mainKind, pinned: true })}
+          label="Fissati"
+          count={pinnedCount}
+        />
+      )}
+    </>
+  );
+}
+
+/// Barra verticale che scivola tra le voci `data-active` del nav genitore.
+/// Misura la voce attiva ad ogni cambio del filtro e anima top/height.
+function ActiveBar({ deps }: { deps: unknown[] }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ top: number; height: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const parent = ref.current?.parentElement;
+    if (!parent) return;
+    const active = parent.querySelector<HTMLElement>('[data-active="true"]');
+    if (!active) {
+      setPos(null);
+      return;
+    }
+    const parentRect = parent.getBoundingClientRect();
+    const r = active.getBoundingClientRect();
+    setPos({ top: r.top - parentRect.top + 6, height: r.height - 12 });
+    // deps: dipendenze che fanno ricalcolare la posizione
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
+  return (
+    <span
+      ref={ref}
+      aria-hidden
+      className={`pointer-events-none absolute -left-1 w-0.5 rounded-full bg-emerald-400 transition-all duration-200 ease-out ${
+        pos ? "opacity-100" : "opacity-0"
+      }`}
+      style={pos ? { top: pos.top, height: pos.height } : undefined}
+    />
   );
 }
 
@@ -150,10 +285,14 @@ export function Sidebar({
   filter,
   onSelect,
   tags,
-  pinnedCount,
   imageCount,
   fileCount,
+  textCount,
   totalCount,
+  pinnedAllCount,
+  pinnedImageCount,
+  pinnedFileCount,
+  pinnedTextCount,
   onSetTagColor,
   onSetTagPinned,
   onRenameTag,
@@ -161,10 +300,14 @@ export function Sidebar({
   filter: Filter;
   onSelect: (f: Filter) => void;
   tags: [string, number, string | null, boolean][];
-  pinnedCount: number;
   imageCount: number;
   fileCount: number;
+  textCount: number;
   totalCount: number;
+  pinnedAllCount: number;
+  pinnedImageCount: number;
+  pinnedFileCount: number;
+  pinnedTextCount: number;
   onSetTagColor: (name: string, color: string) => void;
   onSetTagPinned: (name: string, pinned: boolean) => void;
   onRenameTag: (oldName: string, newName: string) => void;
@@ -199,34 +342,43 @@ export function Sidebar({
     <aside className="flex h-full w-56 shrink-0 flex-col gap-4 border-r border-zinc-800 bg-zinc-900/50 p-3">
       <div className="px-1 text-sm font-semibold text-zinc-200">Clipboard</div>
 
-      <nav className="flex flex-col gap-0.5">
-        <Item
-          active={sameFilter(filter, { kind: "pinned" })}
-          onClick={() => onSelect({ kind: "pinned" })}
-          icon={<Pin className="h-4 w-4" />}
-          label="Fissati"
-          count={pinnedCount}
+      <nav className="relative flex flex-col gap-0.5">
+        <ActiveBar deps={[filter.kind, filter.kind !== "tag" ? filter.pinned : null]} />
+        <CategoryWithPinned
+          mainKind="all"
+          filter={filter}
+          onSelect={onSelect}
+          icon={<Inbox className="h-4 w-4" />}
+          label="Tutto"
+          mainCount={totalCount}
+          pinnedCount={pinnedAllCount}
         />
-        <Item
-          active={sameFilter(filter, { kind: "images" })}
-          onClick={() => onSelect({ kind: "images" })}
+        <CategoryWithPinned
+          mainKind="images"
+          filter={filter}
+          onSelect={onSelect}
           icon={<Image className="h-4 w-4" />}
           label="Immagini"
-          count={imageCount}
+          mainCount={imageCount}
+          pinnedCount={pinnedImageCount}
         />
-        <Item
-          active={sameFilter(filter, { kind: "files" })}
-          onClick={() => onSelect({ kind: "files" })}
+        <CategoryWithPinned
+          mainKind="files"
+          filter={filter}
+          onSelect={onSelect}
           icon={<FileText className="h-4 w-4" />}
           label="File"
-          count={fileCount}
+          mainCount={fileCount}
+          pinnedCount={pinnedFileCount}
         />
-        <Item
-          active={sameFilter(filter, { kind: "all" })}
-          onClick={() => onSelect({ kind: "all" })}
-          icon={<Clock className="h-4 w-4" />}
+        <CategoryWithPinned
+          mainKind="text"
+          filter={filter}
+          onSelect={onSelect}
+          icon={<Type className="h-4 w-4" />}
           label="Testo"
-          count={totalCount}
+          mainCount={textCount}
+          pinnedCount={pinnedTextCount}
         />
       </nav>
 

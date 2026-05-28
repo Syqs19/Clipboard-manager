@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Copy, Check } from "lucide-react";
 import { type Clip } from "../lib/api";
 import { useImageUrl } from "../lib/useImageUrl";
+import { useExitAnimation } from "../lib/useExitAnimation";
 
 export function ImagePreview({
   clip,
@@ -14,7 +15,9 @@ export function ImagePreview({
 }) {
   const [copied, setCopied] = useState(false);
   const fullUrl = useImageUrl(clip?.image_path ?? null);
-  if (!clip || !clip.image_path) return null;
+  const exit = useExitAnimation(clip != null, 200, onClose);
+  if (!exit.mounted || !clip || !clip.image_path) return null;
+  const close = exit.requestClose;
 
   const copy = () => {
     onCopy(clip.id);
@@ -24,18 +27,26 @@ export function ImagePreview({
 
   return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/70 p-8"
+      onClick={close}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/70 p-8 ${
+        exit.exiting ? "anim-fade-out" : "anim-fade-in"
+      }`}
     >
       {fullUrl ? (
         <img
           src={fullUrl}
           alt={clip.preview}
           onClick={(e) => e.stopPropagation()}
-          className="max-h-[75vh] max-w-full rounded-lg border border-zinc-700 object-contain shadow-2xl"
+          className={`max-h-[75vh] max-w-full rounded-lg border border-zinc-700 object-contain shadow-2xl ${
+            exit.exiting ? "anim-scale-out" : "anim-scale-in"
+          }`}
         />
       ) : (
-        <div className="flex h-40 w-60 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-400">
+        <div
+          className={`flex h-40 w-60 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-400 ${
+            exit.exiting ? "anim-scale-out" : "anim-scale-in"
+          }`}
+        >
           Caricamento…
         </div>
       )}
@@ -53,7 +64,7 @@ export function ImagePreview({
         </button>
       </div>
       <button
-        onClick={onClose}
+        onClick={close}
         className="absolute right-4 top-4 rounded-md p-2 text-zinc-300 transition-colors hover:bg-white/10"
       >
         <X className="h-5 w-5" />

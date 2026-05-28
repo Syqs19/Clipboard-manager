@@ -51,7 +51,7 @@ export function TagPicker({
     <div
       ref={ref}
       onClick={(e) => e.stopPropagation()}
-      className="absolute z-20 mt-1 w-56 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
+      className="anim-scale-in absolute z-20 mt-1 w-56 origin-top-left rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
     >
       <div className="flex items-center gap-1.5 border-b border-zinc-800 px-2 py-1.5">
         <Search className="h-3.5 w-3.5 text-zinc-500" />

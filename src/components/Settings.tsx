@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Trash2, Keyboard, Download, Upload } from "lucide-react";
+import { useExitAnimation } from "../lib/useExitAnimation";
 import { Store } from "@tauri-apps/plugin-store";
 import {
   open as openDialog,
@@ -166,7 +167,9 @@ export function Settings({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [recording]);
 
-  if (!open) return null;
+  const exit = useExitAnimation(open, 200, onClose);
+  if (!exit.mounted) return null;
+  const close = exit.requestClose;
 
   const save = async (key: string, val: unknown) => {
     const store = await Store.load("settings.json");
@@ -267,17 +270,21 @@ export function Settings({
 
   return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      onClick={close}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 ${
+        exit.exiting ? "anim-fade-out" : "anim-fade-in"
+      }`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+        className={`w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl ${
+          exit.exiting ? "anim-scale-out" : "anim-scale-in"
+        }`}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
           <h2 className="text-sm font-semibold text-zinc-100">Impostazioni</h2>
           <button
-            onClick={onClose}
+            onClick={close}
             className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <X className="h-4 w-4" />

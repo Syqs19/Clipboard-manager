@@ -1,5 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClipboardList } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { type Clip, type SelectModifier } from "../lib/api";
 import { ClipCard } from "./ClipCard";
 
@@ -19,6 +34,45 @@ function bucketOf(clip: Clip, now: Date): string {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   if (d >= startOfMonth) return "Questo mese";
   return "Più vecchi";
+}
+
+/// Wrapper sortable per le card pinnate (usa dnd-kit/sortable).
+/// Il drag parte solo dopo 8px di movimento (activationConstraint), così
+/// un click breve resta un click — non avvia mai un drag.
+function SortableCard({
+  id,
+  children,
+}: {
+  id: number;
+  children: React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 20 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="cursor-grab active:cursor-grabbing select-none"
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function ClipList({
@@ -66,27 +120,58 @@ export function ClipList({
   onReveal: (path: string) => void;
   highlightQuery: string;
 }) {
-  const [dragId, setDragId] = useState<number | null>(null);
-  const [dragOverId, setDragOverId] = useState<number | null>(null);
-  const pinnedIds = clips.filter((c) => c.pinned).map((c) => c.id);
+  const realPinnedIds = clips.filter((c) => c.pinned).map((c) => c.id);
 
-  const dropOnPinned = (targetId: number) => {
-    const src = dragId;
-    setDragId(null);
-    setDragOverId(null);
-    if (src == null || src === targetId) return;
-    const from = pinnedIds.indexOf(src);
-    const to = pinnedIds.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    const next = [...pinnedIds];
-    next.splice(from, 1);
-    next.splice(to, 0, src);
+  // Update ottimistico del riordino: al drop applichiamo subito il nuovo
+  // ordine in locale, così dnd-kit non vede la card "tornare indietro" nel
+  // tempo che intercorre fra la chiamata al backend e il reload. Quando
+  // l'ordine del parent coincide con il nostro, resettiamo lo stato locale.
+  const [optimisticPinnedIds, setOptimisticPinnedIds] = useState<
+    number[] | null
+  >(null);
+  useEffect(() => {
+    if (optimisticPinnedIds == null) return;
+    const same =
+      optimisticPinnedIds.length === realPinnedIds.length &&
+      optimisticPinnedIds.every((id, i) => id === realPinnedIds[i]);
+    if (same) setOptimisticPinnedIds(null);
+  }, [clips, optimisticPinnedIds]);
+  const pinnedIds = optimisticPinnedIds ?? realPinnedIds;
+
+  // Riordino visivo: sostituisco le posizioni delle clip pinnate seguendo
+  // pinnedIds (preservando l'ordine delle non-pinnate).
+  const clipById = new Map(clips.map((c) => [c.id, c]));
+  const orderedClips: Clip[] = [];
+  let pinnedCursor = 0;
+  for (const c of clips) {
+    if (c.pinned) {
+      const id = pinnedIds[pinnedCursor++];
+      const replacement = clipById.get(id);
+      if (replacement) orderedClips.push(replacement);
+    } else {
+      orderedClips.push(c);
+    }
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = pinnedIds.indexOf(active.id as number);
+    const newIndex = pinnedIds.indexOf(over.id as number);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(pinnedIds, oldIndex, newIndex);
+    setOptimisticPinnedIds(next);
     onReorderPinned(next);
   };
+
   if (clips.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-600">
-        <ClipboardList className="h-10 w-10" />
+      <div className="anim-fade-in flex h-full flex-col items-center justify-center gap-3 text-zinc-600">
+        <ClipboardList className="anim-pulse-soft h-10 w-10" />
         <p className="text-sm">Nessuna clip. Copia qualcosa per iniziare.</p>
       </div>
     );
@@ -96,89 +181,22 @@ export function ClipList({
   let lastBucket = "";
 
   return (
-    <div
-      className="flex flex-col gap-2"
-      // accetta il drag in tutta l'area lista così il cursore resta "move";
-      // il vero target di drop sono le singole card pinnate sotto.
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragId(null);
-        setDragOverId(null);
-      }}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
     >
-      {clips.map((clip, i) => {
-        const bucket = bucketOf(clip, now);
-        const showHeader = bucket !== lastBucket;
-        lastBucket = bucket;
-        const draggable = clip.pinned;
-        const isDragOver = draggable && dragOverId === clip.id && dragId !== clip.id;
-        return (
-          <div key={clip.id} className="flex flex-col gap-2">
-            {showHeader && (
-              <div
-                className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300 ${
-                  i === 0 ? "" : "pt-3"
-                }`}
-              >
-                <span>{bucket}</span>
-                <span className="h-px flex-1 bg-zinc-800" />
-              </div>
-            )}
-            <div
-              draggable={draggable}
-              onDragStart={
-                draggable
-                  ? (e) => {
-                      setDragId(clip.id);
-                      e.dataTransfer.effectAllowed = "move";
-                      // serve setData per avviare il drag su Chromium
-                      e.dataTransfer.setData("text/plain", String(clip.id));
-                    }
-                  : undefined
-              }
-              onDragOver={
-                draggable
-                  ? (e) => {
-                      // preventDefault DEVE essere chiamato sempre, prima dei check,
-                      // altrimenti il browser mostra il cursore "divieto"
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = "move";
-                      if (
-                        dragId != null &&
-                        dragId !== clip.id &&
-                        dragOverId !== clip.id
-                      ) {
-                        setDragOverId(clip.id);
-                      }
-                    }
-                  : undefined
-              }
-              onDragLeave={
-                draggable
-                  ? () => {
-                      if (dragOverId === clip.id) setDragOverId(null);
-                    }
-                  : undefined
-              }
-              onDrop={
-                draggable
-                  ? (e) => {
-                      e.preventDefault();
-                      dropOnPinned(clip.id);
-                    }
-                  : undefined
-              }
-              onDragEnd={() => {
-                setDragId(null);
-                setDragOverId(null);
-              }}
-              className={`rounded-lg transition-shadow ${
-                draggable ? "cursor-move select-none" : ""
-              } ${isDragOver ? "ring-2 ring-emerald-500/70" : ""} ${
-                dragId === clip.id ? "opacity-50" : ""
-              }`}
-            >
+      <SortableContext items={pinnedIds} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-col gap-2">
+          {orderedClips.map((clip, i) => {
+            const bucket = bucketOf(clip, now);
+            const showHeader = bucket !== lastBucket;
+            lastBucket = bucket;
+            // slide-in solo per la clip "in cima" appena flashata (nuova
+            // cattura o risalita per dedup)
+            const justArrived = i === 0 && copiedId === clip.id;
+
+            const card = (
               <ClipCard
                 clip={clip}
                 selected={i === selectedIndex}
@@ -202,10 +220,33 @@ export function ClipList({
                 allTags={allTags}
                 highlightQuery={highlightQuery}
               />
-            </div>
-          </div>
-        );
-      })}
-    </div>
+            );
+
+            return (
+              <div
+                key={clip.id}
+                className={`flex flex-col gap-2 ${justArrived ? "anim-slide-in-top" : ""}`}
+              >
+                {showHeader && (
+                  <div
+                    className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300 ${
+                      i === 0 ? "" : "pt-3"
+                    }`}
+                  >
+                    <span>{bucket}</span>
+                    <span className="h-px flex-1 bg-zinc-800" />
+                  </div>
+                )}
+                {clip.pinned ? (
+                  <SortableCard id={clip.id}>{card}</SortableCard>
+                ) : (
+                  card
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }

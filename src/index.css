@@ -46,3 +46,142 @@ input[type="color"]::-webkit-color-swatch {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---------- Micro-interazioni ----------
+   Tutte rispettano prefers-reduced-motion: in quel caso le @keyframes non
+   girano e gli elementi appaiono al loro stato finale senza transizioni. */
+
+@keyframes anim-slide-in-top {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes anim-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes anim-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+
+@keyframes anim-scale-out {
+  from { opacity: 1; transform: scale(1);    }
+  to   { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes anim-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes anim-pulse-soft {
+  0%, 100% { opacity: 0.55; transform: scale(1);    }
+  50%      { opacity: 0.85; transform: scale(1.04); }
+}
+
+.anim-slide-in-top {
+  animation: anim-slide-in-top 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-fade-in {
+  animation: anim-fade-in 240ms ease-out both;
+}
+.anim-fade-out {
+  animation: anim-fade-out 200ms ease-in both;
+}
+.anim-scale-in {
+  animation: anim-scale-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-scale-out {
+  animation: anim-scale-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.anim-pulse-soft {
+  animation: anim-pulse-soft 2.4s ease-in-out infinite;
+}
+/* variante più lenta + più visibile, per micro-feedback come il toggle
+   della checkbox in modalità selezione. */
+.anim-pop {
+  animation: anim-scale-in 380ms cubic-bezier(0.34, 1.8, 0.4, 1) both;
+}
+
+/* Animazione "tratto a L" per la guida verde della sub-voce:
+   prima la linea verticale cresce dall'alto verso il basso, poi
+   l'orizzontale parte dal punto di giunzione e si estende a destra.
+   Usiamo scale + transform-origin → GPU-friendly. */
+@keyframes anim-grow-y {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes anim-grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.guide-grow-y {
+  transform-origin: top center;
+  animation: anim-grow-y 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.guide-grow-x {
+  transform-origin: left center;
+  animation: anim-grow-x 160ms cubic-bezier(0.4, 0, 0.2, 1) 150ms both;
+}
+
+/* Easing "back-out" usato per il feedback "Copiato": overshoot percepibile
+   ma non distrante. Il pairing con duration-500 dà al bounce respiro. */
+.ease-back-out {
+  transition-timing-function: cubic-bezier(0.34, 2, 0.4, 1);
+}
+
+/* Card hover lift: applicata in ClipCard con la classe `card-lift`.
+   Combina shadow + translate piccolo, GPU-friendly (no layout). */
+.card-lift {
+  transition:
+    transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 160ms ease-out,
+    background-color 280ms ease-out,
+    border-color 280ms ease-out;
+  will-change: transform;
+}
+.card-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- View Transitions per il riordino dei fissati ----------
+   Assegnando view-transition-name univoco a ogni card, il browser anima
+   automaticamente le card che cambiano posizione fra due renders. La
+   durata si applica a tutti i ::view-transition-group(*). */
+@supports (view-transition-name: foo) {
+  ::view-transition-group(*) {
+    animation-duration: 280ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 280ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-slide-in-top,
+  .anim-fade-in,
+  .anim-fade-out,
+  .anim-scale-in,
+  .anim-scale-out,
+  .anim-pulse-soft,
+  .guide-grow-y,
+  .guide-grow-x {
+    animation: none !important;
+  }
+  .card-lift {
+    transition: none !important;
+  }
+  .card-lift:hover {
+    transform: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0ms !important;
+  }
+}
