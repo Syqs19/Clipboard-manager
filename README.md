@@ -19,7 +19,7 @@ A **clipboard history manager for Windows**: local, encrypted, no accounts, no c
 
 ## Privacy & security
 
-The SQLite history file (`%APPDATA%\com.matte.clipboardmanager\clips.db`) is encrypted with **SQLCipher** (AES-256). Images on disk (`images/*.png`) are encrypted with **AES-256-GCM**.
+The SQLite history file (`%APPDATA%\com.clipboardmanager.app\clips.db`) is encrypted with **SQLCipher** (AES-256). Images on disk (`images/*.png`) are encrypted with **AES-256-GCM**.
 
 The master key is generated on first launch and stored in `key.bin`, **encrypted via Windows DPAPI** (user scope): only your Windows account on the same machine can decrypt it. No password to remember.
 
@@ -86,7 +86,7 @@ Frontend (`src/`):
 - `components/` — Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview, TagPicker, Toaster, Onboarding.
 - `lib/` — `api.ts` (invoke + listen wrapper), `format.ts` (masking + tag colors), `useImageUrl.ts` (loading encrypted images via Blob), `useExitAnimation.ts` (hook for exit animations).
 
-Runtime data: `%APPDATA%\com.matte.clipboardmanager\` → `clips.db` (encrypted), `key.bin` (DPAPI), `images/*.png` (encrypted), `settings.json`.
+Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (encrypted), `key.bin` (DPAPI), `images/*.png` (encrypted), `settings.json`.
 
 ## Scope choices
 

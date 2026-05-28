@@ -84,7 +84,7 @@ Repo: https://github.com/Syqs19/Clipboard-manager
 - SQLite via **`rusqlite`** with the `bundled` feature (engine compiled into the exe)
 - Clipboard: **`clipboard-master`** (event-driven monitor, Windows `AddClipboardFormatListener`) + **`arboard`** (read/write text & images)
 - Plugins: `tauri-plugin-global-shortcut`, `tauri-plugin-autostart`, `tauri-plugin-store`
-- Identifier `com.matte.clipboardmanager`; crate `clipboard-manager` / lib `clipboard_manager_lib`
+- Identifier `com.clipboardmanager.app`; crate `clipboard-manager` / lib `clipboard_manager_lib`
 
 ### Scope decisions
 
@@ -121,7 +121,7 @@ Backend (`src-tauri/src/`):
 
 Frontend (`src/`): `App.tsx` (state, keyboard nav, events), `components/` (Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview), `lib/api.ts` (invoke wrappers + events), `lib/format.ts` (masking + tag colors).
 
-Runtime data: `%APPDATA%\com.matte.clipboardmanager\` → `clips.db`, `settings.json`, `images/*.png`.
+Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db`, `settings.json`, `images/*.png`.
 
 ### Notable behaviors
 

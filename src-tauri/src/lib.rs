@@ -45,7 +45,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            // DB nella cartella dati dell'app (es. %APPDATA%\com.matte.clipboardmanager)
+            // DB nella cartella dati dell'app (es. %APPDATA%\com.clipboardmanager.app)
             let data_dir = app.path().app_data_dir().expect("app data dir non disponibile");
             std::fs::create_dir_all(&data_dir).ok();
 
