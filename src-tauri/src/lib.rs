@@ -297,6 +297,7 @@ pub fn run() {
             commands::bulk_remove_tag,
             commands::reveal_in_explorer,
             commands::read_image_bytes,
+            commands::get_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

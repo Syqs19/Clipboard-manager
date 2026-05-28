@@ -14,7 +14,15 @@ import {
   SENSITIVE_KINDS,
   type SelectModifier,
   type SensitiveKind,
+  type Stats,
 } from "../lib/api";
+
+/// Formatta un numero di byte in B / KB / MB.
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const MODIFIER_LABELS: Record<SelectModifier, string> = {
   ctrl: "Ctrl",
@@ -112,7 +120,10 @@ export function Settings({
     ...SENSITIVE_KINDS,
   ]);
   const [selectMod, setSelectMod] = useState<SelectModifier>("ctrl");
-  const [tab, setTab] = useState<"general" | "security" | "reset">("general");
+  const [tab, setTab] = useState<"general" | "security" | "stats" | "reset">(
+    "general",
+  );
+  const [stats, setStats] = useState<Stats | null>(null);
 
   // carica le impostazioni quando si apre
   useEffect(() => {
@@ -142,6 +153,13 @@ export function Settings({
       setHotkeyError("");
     })();
   }, [open]);
+
+  // carica le statistiche quando si apre il tab "stats" (valori sempre freschi)
+  useEffect(() => {
+    if (!open || tab !== "stats") return;
+    setStats(null);
+    api.getStats().then(setStats).catch(() => setStats(null));
+  }, [open, tab]);
 
   // cattura della scorciatoia
   useEffect(() => {
@@ -296,6 +314,7 @@ export function Settings({
             [
               ["general", "General"],
               ["security", "Security"],
+              ["stats", "Stats"],
               ["reset", "Reset"],
             ] as const
           ).map(([id, label]) => (
@@ -445,6 +464,59 @@ export function Settings({
                   ))}
                 </div>
               </div>
+            </>
+          )}
+
+          {tab === "stats" && (
+            <>
+              {stats ? (
+                <>
+                  <Row title="Total clips">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {stats.total}
+                    </span>
+                  </Row>
+                  <Row title="Pinned">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {stats.pinned}
+                    </span>
+                  </Row>
+                  <Row title="Images">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {stats.images}
+                    </span>
+                  </Row>
+                  <Row title="Sensitive" hint="Masked clips (IBAN, cards, emails, tokens)">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {stats.sensitive}
+                    </span>
+                  </Row>
+                  <Row title="Tags">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {stats.tags}
+                    </span>
+                  </Row>
+                  <Row title="Database size" hint="Encrypted clips.db (+ WAL)">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {formatBytes(stats.db_bytes)}
+                    </span>
+                  </Row>
+                  <Row title="Images size" hint="Encrypted PNGs + thumbnails on disk">
+                    <span className="text-sm tabular-nums text-zinc-100">
+                      {formatBytes(stats.images_bytes)}
+                    </span>
+                  </Row>
+                  <Row title="Total disk usage">
+                    <span className="text-sm font-semibold tabular-nums text-emerald-400">
+                      {formatBytes(stats.db_bytes + stats.images_bytes)}
+                    </span>
+                  </Row>
+                </>
+              ) : (
+                <div className="py-8 text-center text-sm text-zinc-500">
+                  Loading…
+                </div>
+              )}
             </>
           )}
 

@@ -70,7 +70,19 @@ export const api = {
   /// Legge un PNG cifrato dal disco e restituisce i byte decifrati come ArrayBuffer.
   readImageBytes: (path: string) =>
     invoke<ArrayBuffer>("read_image_bytes", { path }),
+  getStats: () => invoke<Stats>("get_stats"),
 };
+
+/// Specchio di `commands::Stats` lato Rust.
+export interface Stats {
+  total: number;
+  pinned: number;
+  images: number;
+  sensitive: number;
+  tags: number;
+  db_bytes: number;
+  images_bytes: number;
+}
 
 export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;
 export type SensitiveKind = (typeof SENSITIVE_KINDS)[number];

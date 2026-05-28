@@ -52,7 +52,7 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 
 ## 🧰 Code quality
 
-- ✅ **More tests** — backend coverage from 11 → **47 tests** (db, categorizer with edge cases, images, crypto round-trip and wrong-key reject, in-place encryption migration, watcher `consume_self_write` extracted as a pure function). The watcher and Tauri commands are partially covered through their pure helpers; the I/O parts (arboard, clipboard-master, Tauri State) remain hard to test without an integration harness.
+- ✅ **More tests** — backend coverage from 11 → **48 tests** (db, categorizer with edge cases, images, crypto round-trip and wrong-key reject, in-place encryption migration, watcher `consume_self_write` extracted as a pure function). The watcher and Tauri commands are partially covered through their pure helpers; the I/O parts (arboard, clipboard-master, Tauri State) remain hard to test without an integration harness.
 - ✅ **UI errors**: toast system (ToasterProvider + useNotify) with error/success/info types, slide-in from the right + slide-out, auto-dismiss after 4.5s, manual close. Used in tag rename; extendable to any async handler.
 
 ---
@@ -87,10 +87,13 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ Auto-update via `tauri-plugin-updater` + GitHub Actions release workflow
 - ✅ First public release: **v0.1.0** with signed MSI + NSIS bundles
 
+### Done (2026-05-29)
+- ✅ Renamed app identifier `com.matte.clipboardmanager` → `com.clipboardmanager.app` (neutral, no personal name) + bump to v0.2.0
+- ✅ Stats panel (Settings tab): total clips, pinned, images, sensitive, tags + disk usage (encrypted DB + images). New `get_stats` command, `Db::stats()` with test (48 tests total)
+
 ### Next candidates (not yet done)
 - Code signing (paid certificate → removes SmartScreen warning on install)
 - Optional passphrase as an alternative to DPAPI-only (opt-in, prompts at launch)
 - Drag-out of a clip from the card to an external app (real clipboard-manager feel)
-- Stats panel (total clips, pinned, disk usage)
 - Settings → About panel (version, repo link, license)
 - Real screenshots in README

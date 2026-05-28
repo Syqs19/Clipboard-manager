@@ -165,6 +165,16 @@ pub struct NewClip {
     pub hash: String,
 }
 
+/// Conteggi aggregati per il pannello statistiche.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct DbStats {
+    pub total: i64,
+    pub pinned: i64,
+    pub images: i64,
+    pub sensitive: i64,
+    pub tags: i64,
+}
+
 pub struct Db {
     conn: Mutex<Connection>,
 }
@@ -452,6 +462,22 @@ impl Db {
             }
         }
         Ok(n)
+    }
+
+    /// Conteggi aggregati (totale clip, pinnate, immagini, sensibili, numero tag).
+    pub fn stats(&self) -> rusqlite::Result<DbStats> {
+        let conn = self.conn.lock().unwrap();
+        let (total, pinned, images, sensitive) = conn.query_row(
+            "SELECT COUNT(*),
+                    COALESCE(SUM(pinned), 0),
+                    COALESCE(SUM(content_type = 'image'), 0),
+                    COALESCE(SUM(sensitive), 0)
+             FROM clips",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )?;
+        let tags: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))?;
+        Ok(DbStats { total, pinned, images, sensitive, tags })
     }
 
     // ----- tag -----
@@ -849,6 +875,39 @@ mod tests {
         }
         let n = db.backfill_sensitive_kinds().unwrap();
         assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn stats_counts_clips_pins_images_sensitive_and_tags() {
+        let db = Db::open_in_memory().unwrap();
+        let p = db.insert_or_bump_clip(&new_text("pinned", 1)).unwrap();
+        db.set_pinned(p, true).unwrap();
+        db.insert_or_bump_clip(&new_text("plain", 2)).unwrap();
+        db.insert_or_bump_clip(&new_sensitive("a@b.it", "email", 3))
+            .unwrap();
+        let img = NewClip {
+            content: None,
+            content_html: None,
+            content_rtf: None,
+            content_type: "image".into(),
+            image_path: Some("X:/x.png".into()),
+            preview: "Immagine".into(),
+            created_at: 4,
+            char_count: 0,
+            sensitive: false,
+            sensitive_kind: None,
+            hash: "h-img".into(),
+        };
+        db.insert_or_bump_clip(&img).unwrap();
+        let tag = db.get_or_create_tag("T", None, false).unwrap();
+        db.attach_tag(p, tag).unwrap();
+
+        let s = db.stats().unwrap();
+        assert_eq!(s.total, 4);
+        assert_eq!(s.pinned, 1);
+        assert_eq!(s.images, 1);
+        assert_eq!(s.sensitive, 1);
+        assert_eq!(s.tags, 1);
     }
 
     #[test]
