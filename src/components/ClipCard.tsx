@@ -54,6 +54,7 @@ export function ClipCard({
   onUpdate,
   onAddTag,
   onRemoveTag,
+  onSetTagColor,
 }: {
   clip: Clip;
   selected: boolean;
@@ -67,6 +68,7 @@ export function ClipCard({
   onUpdate: (id: number, content: string) => void;
   onAddTag: (id: number, name: string) => void;
   onRemoveTag: (id: number, name: string) => void;
+  onSetTagColor: (name: string, color: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -183,9 +185,13 @@ export function ClipCard({
               key={t}
               className="inline-flex items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
             >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: colorOf(t) }}
+              <input
+                type="color"
+                value={colorOf(t)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => onSetTagColor(t, e.target.value)}
+                title="Colore tag"
+                className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full"
               />
               {t}
               <button

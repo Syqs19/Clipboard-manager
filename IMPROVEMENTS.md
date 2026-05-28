@@ -4,13 +4,14 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ## 🔑 Alto impatto (esperienza da clipboard manager "vero")
 
-- ⏳ **Navigazione da tastiera + incolla diretto** — frecce ↑↓ per scorrere, `Invio` per
-  copiare *e incollare* nell'app dov'eri (simulando Ctrl+V) e nascondere la finestra;
-  tasti `1-9` per incollare al volo. È il salto UX più grande (stile Raycast/Paste).
+- ✅ **Navigazione da tastiera** — frecce ↑↓ per scorrere (selezione evidenziata e
+  sincronizzata col mouse), `Invio` e `1-9` per copiare la clip selezionata, con animazione
+  "Copiato" (anche quando una clip risale in cima). L'incolla automatico (Ctrl+V simulato +
+  chiusura finestra) è stato **scartato per scelta UX**: l'Invio ora **copia e basta**.
 - ☐ **Salta i password manager** — rispettare i formati clipboard "escludi da cronologia"
   (`ExcludeClipboardContentFromMonitorProcessing`) così le password copiate non vengono
   salvate. Era nel piano originale; tocca la priorità privacy.
-- ⏳ **Icona personalizzata** — sostituire l'icona default di Tauri con una vera.
+- ✅ **Icona personalizzata** — icona clipboard verde generata, sostituita a quella di Tauri.
 
 ## 🔒 Hardening privacy
 
@@ -20,9 +21,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ## ✨ Completare lo spec / feature
 
-- ⏳ **Modifica del contenuto** di un clip (doppio click → editor). Previsto, non fatto.
+- ✅ **Modifica del contenuto** di un clip (matita in hover → editor inline; al salvataggio
+  ricategorizza tipo e sensibilità).
 - ☐ **Riordino drag & drop** dei fissati. Previsto, non fatto.
-- ⏳ **Colori dei tag** (il DB ha già il campo `color`, inutilizzato nella UI).
+- ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
+  sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
 - ☐ **Più tipi di contenuto**: file copiati, HTML/RTF.
 - ☐ **"Incolla come testo semplice"**.
 - ☐ **Raggruppa per data** in cronologia (Oggi / Ieri / ...).
@@ -42,7 +45,13 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ---
 
-### In lavorazione adesso
-1. ⏳ Icona personalizzata
-2. ⏳ Modifica clip + colori tag
-3. ⏳ Navigazione tastiera + incolla diretto
+### Completato (2026-05-28)
+- ✅ Icona personalizzata
+- ✅ Modifica del contenuto dei clip
+- ✅ Colori dei tag (picker nativo da sidebar e dai chip)
+- ✅ Navigazione da tastiera (Invio/1-9 = copia) + feedback "Copiato"
+
+### Prossimi candidati (non ancora fatti)
+- Salta i password manager (privacy)
+- Riordino drag & drop dei fissati
+- README + onboarding al primo avvio

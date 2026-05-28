@@ -15,6 +15,7 @@ export function ClipList({
   onUpdate,
   onAddTag,
   onRemoveTag,
+  onSetTagColor,
 }: {
   clips: Clip[];
   selectedIndex: number;
@@ -28,6 +29,7 @@ export function ClipList({
   onUpdate: (id: number, content: string) => void;
   onAddTag: (id: number, name: string) => void;
   onRemoveTag: (id: number, name: string) => void;
+  onSetTagColor: (name: string, color: string) => void;
 }) {
   if (clips.length === 0) {
     return (
@@ -55,6 +57,7 @@ export function ClipList({
           onUpdate={onUpdate}
           onAddTag={onAddTag}
           onRemoveTag={onRemoveTag}
+          onSetTagColor={onSetTagColor}
         />
       ))}
     </div>

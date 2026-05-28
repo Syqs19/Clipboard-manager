@@ -201,6 +201,7 @@ function App() {
             onUpdate={handleUpdate}
             onAddTag={handleAddTag}
             onRemoveTag={handleRemoveTag}
+            onSetTagColor={handleSetTagColor}
           />
         </div>
       </main>
