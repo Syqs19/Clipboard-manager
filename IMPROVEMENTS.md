@@ -1,110 +1,94 @@
-# Roadmap miglioramenti — Clipboard Manager
+# Improvements roadmap — Clipboard
 
-Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳ in corso · ✅ fatto.
+Status: ☐ todo · ⏳ in progress · ✅ done
 
-## 🔑 Alto impatto (esperienza da clipboard manager "vero")
+## 🔑 High impact (real clipboard manager experience)
 
-- ✅ **Navigazione da tastiera** — frecce ↑↓ per scorrere (selezione evidenziata e
-  sincronizzata col mouse), `Invio` e `1-9` per copiare la clip selezionata, con animazione
-  "Copiato" (anche quando una clip risale in cima). L'incolla automatico (Ctrl+V simulato +
-  chiusura finestra) è stato **scartato per scelta UX**: l'Invio ora **copia e basta**.
-- ✅ **Salta i password manager** — il watcher rispetta i formati clipboard
-  `ExcludeClipboardContentFromMonitorProcessing` e `CanIncludeInClipboardHistory`:
-  se presenti, la cattura viene saltata in silenzio (sempre-on, niente UI).
-- ✅ **Icona personalizzata** — icona clipboard verde generata, sostituita a quella di Tauri.
+- ✅ **Keyboard navigation** — ↑↓ to scroll (highlighted selection synced with mouse), `Enter` and `1-9` to copy the selected clip with a "Copied" animation (even when a clip bumps to the top). Auto-paste (simulated Ctrl+V + window close) was **dropped by UX choice**: Enter now just copies.
+- ✅ **Skip password managers** — the watcher respects the `ExcludeClipboardContentFromMonitorProcessing` and `CanIncludeInClipboardHistory` clipboard formats (DWORD value read for the latter to follow Microsoft's semantics). Always-on, no UI.
+- ✅ **Custom icon** — minimalist clipboard outline + filled emerald clip on dark squircle background.
 
-## 🔒 Hardening privacy
+## 🔒 Privacy hardening
 
-- ✅ **Cifratura a riposo** — SQLCipher (DB intero) + AES-256-GCM per i PNG.
-  Chiave master generata al primo avvio (32 byte) e custodita in `key.bin`
-  cifrato via Windows DPAPI (scope utente). Migrazione automatica dal vecchio
-  DB in chiaro (backup in `clips.plain.bak`) e dai PNG in chiaro al primo
-  avvio. Le immagini sono servite al frontend via comando dedicato
-  `read_image_bytes` + Blob/ObjectURL invece di `asset://`. Tradeoff visibile:
-  rimosso "Apri posizione" per le immagini (i PNG su disco sono opachi).
-- ✅ **Auto-cancellazione** dei clip sensibili: toggle "Non salvarli mai" + TTL in minuti
-  (sweep ogni 60s, non tocca le clip fissate). Inoltre, se il toggle è on e si ricopia
-  un sensibile già in cronologia, viene rimosso anche quello.
-- ✅ **Granularità categorie sensibili** — multi-checkbox (email/IBAN/carte/token) per
-  decidere quali tipi sono soggetti a non-salvataggio e TTL. La mascheratura nella UI
-  resta sempre attiva su tutti i sensibili rilevati, indipendentemente dalla scelta.
-- ☐ ~~Hotkey panico~~ — scartata per UX (rischio pressioni accidentali).
+- ✅ **Encryption at rest** — SQLCipher (full DB) + AES-256-GCM for PNGs.
+  Master key generated at first launch (32 bytes) and stored in `key.bin`
+  encrypted via Windows DPAPI (user scope). Automatic migration from
+  legacy plaintext DB (backup in `clips.plain.bak`) and plaintext PNGs at
+  first launch. Images served to the frontend via dedicated command
+  `read_image_bytes` + Blob/ObjectURL instead of `asset://`. Visible
+  tradeoff: removed "Open location" for images (PNGs on disk are opaque).
+- ✅ **Auto-delete of sensitive clips**: "Never save them" toggle + TTL in minutes (sweep every 60s, doesn't touch pinned clips). Also, if the toggle is on and a sensitive value is re-copied, the existing one in history is removed too.
+- ✅ **Granularity of sensitive categories** — multi-checkbox (email/IBAN/cards/tokens) to decide which types are subject to don't-save and TTL. The UI masking remains always active on all detected sensitive values, regardless of the choice.
+- ✅ **No HTML/RTF for sensitive clips** — if the categorizer marks the text as sensitive, the watcher discards HTML/RTF: markup may leak provenance/context next to the cleartext.
+- ☐ ~~Panic hotkey~~ — dropped for UX (accidental-press risk).
+- ☐ **Optional passphrase** (in addition to DPAPI) — protects against malware running under the same Windows user. Trade-off: must be typed at every launch, no recovery if forgotten.
 
-## ✨ Completare lo spec / feature
+## ✨ Spec / features completion
 
-- ✅ **Modifica del contenuto** di un clip (matita in hover → editor inline; al salvataggio
-  ricategorizza tipo e sensibilità).
-- ✅ **Riordino drag & drop** dei fissati — trascina una clip fissata sopra un'altra
-  per riordinare. Persistito su `pinned_order` nel DB.
-- ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
-  sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
-- ✅ **Più tipi di contenuto**: **file copiati** (CF_HDROP) + **HTML**
-  (CF_HTML letto/scritto via WinAPI) + **RTF** (CF_RTF). Badge nella card
-  che indica i formati presenti (HTML / RTF / HTML+RTF), bottone "Copia
-  come testo semplice" per incollare senza formattazione.
-- ✅ **"Incolla come testo semplice"** — bottone dedicato sulle clip con HTML
-  che mette solo CF_UNICODETEXT (no formattazione).
-- ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
-  Questo mese / Più vecchi). Header sottili tra i gruppi.
-- ✅ **Multi-selezione** + elimina in blocco — Ctrl/Alt+click (configurabile) per
-  attivare, Shift+click per estendere il range, modalità selezione con checkbox
-  e barra di azioni (Elimina, Pinna/Despinna, Aggiungi tag).
-- ✅ **Export / Import** della cronologia in JSON (immagini inline base64).
-  Modalità "Unisci" (salta duplicati per hash) e "Sostituisci" (wipe + reinsert).
-- ✅ **Tag picker** condiviso: popover con ricerca + lista + "Crea nuovo" sia
-  sulla card (+tag) sia nella barra multi-selezione.
-- ✅ **Tag fissati** nella sidebar: stella per fissare/sfissare, sezione
-  "Fissati" sopra "Categorie".
+- ✅ **Edit clip content** (pencil on hover → inline editor; on save it re-categorizes type and sensitivity).
+- ✅ **Drag & drop reordering of pinned clips** — built on `@dnd-kit/sortable` (no more HTML5 drag image, smooth FLIP animations, optimistic update at drop to avoid the post-release jitter).
+- ✅ **Tag colors** — native color picker (full wheel) both from the sidebar dot and from the chip dots on cards; deterministic fallback from tag name.
+- ✅ **More content types**: **files copied** (CF_HDROP) + **HTML** (CF_HTML read/written via WinAPI) + **RTF** (CF_RTF). Badge on the card showing which formats are present (HTML / RTF / HTML+RTF), "Copy as plain text" button to paste without formatting.
+- ✅ **"Paste as plain text"** — dedicated button on clips with HTML that puts only CF_UNICODETEXT (no formatting).
+- ✅ **Group by date** in history (Pinned / Today / Yesterday / This week / This month / Older). Thin headers between groups.
+- ✅ **Multi-selection** + bulk delete — Ctrl/Alt+click (configurable) to enable, Shift+click to extend the range, selection mode with checkboxes and action bar (Delete, Pin/Unpin, Add tag).
+- ✅ **Export / Import** of history in JSON (images inlined in base64). "Merge" mode (skip duplicates by hash) and "Replace" mode (wipe + reinsert).
+- ✅ **Shared tag picker**: popover with search + list + "Create new" both on the card (+tag) and in the multi-selection bar.
+- ✅ **Pinned tags** in sidebar: star to pin/unpin, "Pinned" section above "Tags".
+- ✅ **Self-write guard** — when the app itself writes a clip to the clipboard (copy from history), the watcher consumes the matching event and doesn't auto-bump it to the top. No more continuous reordering when using the history.
 
-## 🎨 Polish & distribuzione
+## 🎨 Polish & distribution
 
-- ✅ **Badge tastiera 1-9** sulle prime 9 card (promemoria visivo della shortcut).
-- ✅ **Apri posizione file** nelle azioni hover (immagini e file): apre Esplora
-  risorse e seleziona il file (`explorer.exe /select,"path"` con quoting corretto).
-- ✅ **Highlight della ricerca** nelle preview: le occorrenze della query
-  vengono evidenziate in giallo.
-- ✅ **Miniature ridotte** salvate come `<hash>.thumb.png` (200px lato lungo,
-  resize bilineare). Backfill all'avvio per le immagini esistenti. La card
-  carica la thumb; l'anteprima a tutto schermo usa il PNG originale.
-- ☐ **Auto-update** (`tauri-plugin-updater`) + **CI GitHub Actions** che genera le release.
-- ☐ **Firma del codice** (rimuove l'avviso SmartScreen — richiede certificato a pagamento).
-- ☐ **README** con screenshot + onboarding al primo avvio ("premi Ctrl+Shift+V").
+- ✅ **Keyboard badges 1-9** on the first 9 cards (visual reminder of the shortcut).
+- ✅ **Open location** in hover actions for **files only** (images are encrypted on disk, opening Explorer wouldn't help). Uses `explorer.exe /select,"path"` with proper quoting.
+- ✅ **Search highlight** in previews: query occurrences highlighted in yellow.
+- ✅ **Reduced thumbnails** saved as `<hash>.thumb.png` (200px on longest side, bilinear resize). Backfill at startup for existing images. Card loads the thumb; full-screen preview uses the original PNG.
+- ✅ **GUI overhaul** — brand header (logo + wordmark, collapsible chevron), glass effect on sidebar/cards (backdrop-blur), emerald glow on selected/copied, radial green gradient background, breathing room (gap-2.5 lists, p-4 sidebar).
+- ✅ **Micro-animations everywhere** — card hover lift, new-clip slide-in, "Copied" with back-out bounce, modals fade+scale in/out (`useExitAnimation` hook + state machine), sidebar ActiveBar that slides between active items, multi-select checkbox pop, tag-picker scale, L-guide drawn for the Pinned sub-entry (vertical then horizontal, reverse on exit), View Transitions reserved as a fallback. All respect `prefers-reduced-motion`.
+- ✅ **Onboarding at first launch** — overlay with brand, configured hotkey shown, 4 tips (open shortcut, keyboard nav, pin & tags, encryption + masking). Persisted via `onboarded` boolean in the store.
+- ✅ **Full English UI + README**.
+- ☐ **Auto-update** (`tauri-plugin-updater`) + **GitHub Actions CI** that generates releases.
+- ☐ **Code signing** (removes SmartScreen warning — needs a paid certificate).
 
-## 🧰 Qualità codice
+## 🧰 Code quality
 
-- ⏳ **Più test** — copertura DB/categorizer/images da 11 → **28 test** (delete_clips,
-  delete_expired_sensitive_kinds, backfill, rename_tag, bulk_remove_tag, set_tag_pinned,
-  reorder_pinned, wipe_all, image_paths_for, thumbnail roundtrip e aspect ratio,
-  sensitive_kind per tipo). Watcher/commands ancora da coprire.
-- ✅ **Errori in UI**: sistema toast (ToasterProvider + useNotify) con tipi
-  error/success/info, auto-dismiss 4.5s, chiusura manuale. Usato per la
-  rinomina tag; estendibile a ogni handler async.
+- ✅ **More tests** — backend coverage from 11 → **47 tests** (db, categorizer with edge cases, images, crypto round-trip and wrong-key reject, in-place encryption migration, watcher `consume_self_write` extracted as a pure function). The watcher and Tauri commands are partially covered through their pure helpers; the I/O parts (arboard, clipboard-master, Tauri State) remain hard to test without an integration harness.
+- ✅ **UI errors**: toast system (ToasterProvider + useNotify) with error/success/info types, slide-in from the right + slide-out, auto-dismiss after 4.5s, manual close. Used in tag rename; extendable to any async handler.
 
 ---
 
-### Completato (2026-05-28)
-- ✅ Icona personalizzata
-- ✅ Modifica del contenuto dei clip
-- ✅ Colori dei tag (picker nativo da sidebar e dai chip)
-- ✅ Navigazione da tastiera (Invio/1-9 = copia) + feedback "Copiato"
-- ✅ Salta i password manager (rispetto dei formati di esclusione)
-- ✅ Auto-cancellazione clip sensibili (toggle + TTL + rimozione su ricopia)
-- ✅ Granularità categorie sensibili (multi-checkbox email/IBAN/carte/token)
-- ✅ Impostazioni divise in tab (Generali / Sicurezza / Reset), altezza stabile
-- ✅ Raggruppa per data nella cronologia
-- ✅ Riordino drag & drop delle clip fissate
-- ✅ Multi-selezione con barra di azioni e modifier configurabile
-- ✅ Export / Import JSON con dialog nativo (merge / replace)
-- ✅ Miniature ridotte per le immagini (resize bilineare + backfill)
-- ✅ Tag picker condiviso + tag fissati nella sidebar
-- ✅ Tag polish: rinomina (doppio click), rimuovi tag in bulk, ordina per più usati
-- ✅ Test backend ampliati (28 unit test)
-- ✅ File copiati dall'Explorer (CF_HDROP read/write)
-- ✅ Sistema toast per gli errori in UI
-- ✅ Cattura HTML (CF_HTML) + bottone "Copia come testo semplice"
-- ✅ Cattura RTF (CF_RTF)
-- ✅ Badge tastiera 1-9, Apri posizione file, Highlight ricerca
+### Done (2026-05-28)
+- ✅ Custom icon → simplified outline+clip
+- ✅ Edit clip content
+- ✅ Tag colors (native picker from sidebar and chips)
+- ✅ Keyboard navigation (Enter/1-9 = copy) + "Copied" feedback
+- ✅ Skip password managers (respects exclusion formats)
+- ✅ Sensitive clip auto-delete (toggle + TTL + remove on re-copy)
+- ✅ Sensitive category granularity (email/IBAN/cards/tokens multi-checkbox)
+- ✅ Settings split into tabs (General / Security / Reset), stable height
+- ✅ Group by date in history
+- ✅ Drag & drop reorder of pinned clips (HTML5 → dnd-kit)
+- ✅ Multi-selection with action bar and configurable modifier
+- ✅ Export / Import JSON with native dialog (merge / replace)
+- ✅ Reduced thumbnails for images (bilinear resize + backfill)
+- ✅ Shared tag picker + pinned tags in the sidebar
+- ✅ Tag polish: rename (double click), bulk remove tag, sort by most used
+- ✅ Extended backend tests (47 unit tests)
+- ✅ Files copied from Explorer (CF_HDROP read/write)
+- ✅ Toast system for UI errors
+- ✅ HTML capture (CF_HTML) + "Copy as plain text" button
+- ✅ RTF capture (CF_RTF)
+- ✅ 1-9 keyboard badges, Open location, Search highlight
+- ✅ Encryption at rest (SQLCipher + AES-GCM PNG, DPAPI master key)
+- ✅ GUI overhaul (brand, glass, animations, sidebar restructure)
+- ✅ Self-write guard (no more auto-bump when copying from history)
+- ✅ Onboarding at first launch
+- ✅ Full English i18n (UI + README + tray + error messages)
 
-### Prossimi candidati (non ancora fatti)
-- Polish & motion (pass animazioni dedicato)
-- README + onboarding al primo avvio
+### Next candidates (not yet done)
+- Auto-update + GitHub Actions CI (release `.msi`/`.exe` on tag, in-app update notifier)
+- Code signing (paid certificate → removes SmartScreen warning on install)
+- Optional passphrase as an alternative to DPAPI-only (opt-in, opens at launch)
+- Drag-out of a clip from the card to an external app (real clipboard-manager feel)
+- Stats panel (total clips, pinned, disk usage)
+- Settings → About panel (version, repo link, license)
