@@ -255,6 +255,7 @@ pub fn run() {
             commands::set_tag_pinned,
             commands::rename_tag,
             commands::bulk_remove_tag,
+            commands::reveal_in_explorer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

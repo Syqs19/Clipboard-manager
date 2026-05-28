@@ -64,16 +64,18 @@ fn write_clip_to_clipboard(db: &Db, id: i64, as_plain: bool) -> Result<(), Strin
             }
         }
     } else if let Some(content) = clip.content {
-        // se è disponibile la versione HTML e l'utente non ha chiesto "plain",
-        // scrive entrambi i formati (CF_UNICODETEXT + CF_HTML) così l'incolla
+        // se sono disponibili versioni formattate (HTML/RTF) e l'utente non
+        // ha chiesto "plain", le scriviamo accanto al testo così l'incolla
         // mantiene la formattazione
-        if !as_plain {
-            if let Some(html) = clip.content_html.as_deref() {
-                if crate::win_clipboard::write_text_with_html(&content, html) {
-                    return Ok(());
-                }
-                // fallback su testo semplice se la scrittura HTML fallisce
+        if !as_plain && (clip.content_html.is_some() || clip.content_rtf.is_some()) {
+            if crate::win_clipboard::write_rich_clipboard(
+                &content,
+                clip.content_html.as_deref(),
+                clip.content_rtf.as_deref(),
+            ) {
+                return Ok(());
             }
+            // fallback su testo semplice se la scrittura combinata fallisce
         }
         cb.set_text(content).map_err(|e| e.to_string())?;
     }
@@ -305,6 +307,7 @@ pub fn import_history(
         let new = NewClip {
             content: c.content,
             content_html: None,
+            content_rtf: None,
             content_type: c.content_type,
             image_path,
             preview: c.preview,
@@ -380,6 +383,40 @@ pub fn bulk_remove_tag(
     name: String,
 ) -> Result<(), String> {
     db.bulk_remove_tag(&ids, name.trim()).map_err(|e| e.to_string())
+}
+
+/// Apre la cartella contenente il file indicato in Esplora risorse, selezionando
+/// il file (`explorer.exe /select,"path"`).
+#[tauri::command]
+pub fn reveal_in_explorer(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Il percorso non esiste".into());
+    }
+    // `explorer.exe /select,"path"` richiede che il path SIA quotato letteralmente,
+    // ma std::process::Command::arg quoterebbe l'intero "/select,..." rompendo il
+    // parsing di explorer. Usiamo raw_arg (Windows-only) per controllare la stringa.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Esplora risorse preferisce path assoluti con backslash
+        let abs = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        // strippa il prefisso UNC '\\?\' se presente
+        let s = abs.to_string_lossy();
+        let clean = s.strip_prefix(r"\\?\").unwrap_or(&s);
+        std::process::Command::new("explorer.exe")
+            .raw_arg(format!("/select,\"{}\"", clean))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Imposta il colore di un tag.

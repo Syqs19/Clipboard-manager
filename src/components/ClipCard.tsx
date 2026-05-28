@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FolderOpen,
   Pencil,
   Pin,
   Plus,
@@ -17,7 +18,7 @@ import {
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
-import { maskSensitive, relativeTime } from "../lib/format";
+import { maskSensitive, relativeTime, splitMatches } from "../lib/format";
 
 function IconButton({
   title,
@@ -50,6 +51,7 @@ export function ClipCard({
   clip,
   selected,
   copied,
+  keyHint,
   selectedForBulk,
   onSelect,
   colorOf,
@@ -62,13 +64,16 @@ export function ClipCard({
   onRemoveTag,
   onSetTagColor,
   onBulkClick,
+  onReveal,
   selectModifier,
   selectionMode,
   allTags,
+  highlightQuery,
 }: {
   clip: Clip;
   selected: boolean;
   copied: boolean;
+  keyHint?: number;
   selectedForBulk?: boolean;
   onSelect: () => void;
   colorOf: (name: string) => string;
@@ -81,9 +86,11 @@ export function ClipCard({
   onRemoveTag: (id: number, name: string) => void;
   onSetTagColor: (name: string, color: string) => void;
   onBulkClick?: (e: React.MouseEvent) => void;
+  onReveal?: (path: string) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
   allTags: [string, number, string | null, boolean][];
+  highlightQuery?: string;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -100,6 +107,8 @@ export function ClipCard({
   const isImage = clip.content_type === "image" && !!clip.image_path;
   const isFiles = clip.content_type === "files";
   const hasHtml = !!clip.content_html && !isImage && !isFiles;
+  const hasRtf = !!clip.content_rtf && !isImage && !isFiles;
+  const hasRich = hasHtml || hasRtf;
   // per i file, content è un JSON array di path
   const filePaths: string[] = (() => {
     if (!isFiles || !clip.content) return [];
@@ -147,7 +156,9 @@ export function ClipCard({
     <div
       ref={rootRef}
       onClick={handleCardClick}
-      className={`group relative rounded-lg border bg-zinc-800/30 p-3 transition-all ${
+      className={`group relative rounded-lg border bg-zinc-800/30 transition-all ${
+        keyHint !== undefined ? "py-3 pl-8 pr-3" : "p-3"
+      } ${
         editing ? "" : "cursor-pointer hover:bg-zinc-800/60"
       } ${
         selectedForBulk
@@ -233,7 +244,24 @@ export function ClipCard({
             masked ? "font-mono tracking-wide text-zinc-400" : "text-zinc-100"
           }`}
         >
-          {text || "(vuoto)"}
+          {!text ? (
+            "(vuoto)"
+          ) : highlightQuery && highlightQuery.trim() && !masked ? (
+            splitMatches(text, highlightQuery).map((seg, i) =>
+              seg.match ? (
+                <mark
+                  key={i}
+                  className="rounded bg-amber-400/30 px-0.5 text-amber-100"
+                >
+                  {seg.text}
+                </mark>
+              ) : (
+                <span key={i}>{seg.text}</span>
+              ),
+            )
+          ) : (
+            text
+          )}
         </p>
       )}
 
@@ -243,12 +271,18 @@ export function ClipCard({
           {clip.pinned && (
             <Pin className="h-3 w-3 fill-amber-400 text-amber-400" />
           )}
-          {hasHtml && (
+          {hasRich && (
             <span
-              title="Contiene formattazione HTML"
+              title={
+                hasHtml && hasRtf
+                  ? "Contiene formattazione HTML e RTF"
+                  : hasHtml
+                    ? "Contiene formattazione HTML"
+                    : "Contiene formattazione RTF"
+              }
               className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-300"
             >
-              HTML
+              {hasHtml && hasRtf ? "HTML+RTF" : hasHtml ? "HTML" : "RTF"}
             </span>
           )}
           {clip.tags.map((t) => (
@@ -306,6 +340,13 @@ export function ClipCard({
         </div>
       )}
 
+      {/* badge tastiera 1-9 */}
+      {keyHint !== undefined && !editing && (
+        <div className="absolute left-2 top-2 flex h-4 w-4 items-center justify-center rounded border border-zinc-700 bg-zinc-900/80 text-[10px] font-semibold text-zinc-400">
+          {keyHint}
+        </div>
+      )}
+
       {/* checkbox in modalità selezione */}
       {selectionMode && !editing && (
         <div className="absolute right-2 top-2 text-emerald-400">
@@ -337,13 +378,26 @@ export function ClipCard({
               <Pencil className="h-4 w-4" />
             </IconButton>
           )}
+          {(isImage || isFiles) && onReveal && (
+            <IconButton
+              title="Apri posizione"
+              onClick={() => {
+                const target = isImage
+                  ? clip.image_path
+                  : filePaths[0];
+                if (target) onReveal(target);
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+            </IconButton>
+          )}
           <IconButton
-            title={hasHtml ? "Copia con formattazione" : "Copia"}
+            title={hasRich ? "Copia con formattazione" : "Copia"}
             onClick={() => onCopy(clip.id)}
           >
             <Copy className="h-4 w-4" />
           </IconButton>
-          {hasHtml && (
+          {hasRich && (
             <IconButton
               title="Copia come testo semplice"
               onClick={() => onCopy(clip.id, true)}

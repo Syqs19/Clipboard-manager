@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS clips (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     content        TEXT,                       -- NULL per le immagini pure
     content_html   TEXT,                       -- versione formattata HTML (NULL se assente)
+    content_rtf    TEXT,                       -- versione RTF (NULL se assente)
     content_type   TEXT NOT NULL,              -- 'text' | 'image' | 'url' | 'files'
     image_path     TEXT,
     preview        TEXT NOT NULL,
@@ -74,6 +75,7 @@ pub struct Clip {
     pub id: i64,
     pub content: Option<String>,
     pub content_html: Option<String>,
+    pub content_rtf: Option<String>,
     pub content_type: String,
     pub image_path: Option<String>,
     pub thumb_path: Option<String>,
@@ -92,6 +94,7 @@ pub struct Clip {
 pub struct NewClip {
     pub content: Option<String>,
     pub content_html: Option<String>,
+    pub content_rtf: Option<String>,
     pub content_type: String,
     pub image_path: Option<String>,
     pub preview: String,
@@ -107,7 +110,7 @@ pub struct Db {
 }
 
 const SELECT_COLS: &str =
-    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash, content_html";
+    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash, content_html, content_rtf";
 
 impl Db {
     pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Self> {
@@ -125,6 +128,7 @@ impl Db {
         // migrazione additiva per DB pre-esistenti (colonne aggiunte dopo il rilascio)
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN sensitive_kind TEXT", []);
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN content_html TEXT", []);
+        let _ = conn.execute("ALTER TABLE clips ADD COLUMN content_rtf TEXT", []);
         let _ = conn.execute(
             "ALTER TABLE tags ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
             [],
@@ -147,11 +151,12 @@ impl Db {
             return Ok(id);
         }
         conn.execute(
-            "INSERT INTO clips (content, content_html, content_type, image_path, preview, created_at, char_count, sensitive, sensitive_kind, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO clips (content, content_html, content_rtf, content_type, image_path, preview, created_at, char_count, sensitive, sensitive_kind, hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 new.content,
                 new.content_html,
+                new.content_rtf,
                 new.content_type,
                 new.image_path,
                 new.preview,
@@ -556,14 +561,14 @@ impl Db {
         hash: &str,
     ) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
-        // l'editor manuale produce solo plain text: azzera l'eventuale HTML
+        // l'editor manuale produce solo plain text: azzera HTML e RTF
         let with_hash = conn.execute(
-            "UPDATE clips SET content=?2, content_html=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7, hash=?8 WHERE id=?1",
+            "UPDATE clips SET content=?2, content_html=NULL, content_rtf=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7, hash=?8 WHERE id=?1",
             params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind, hash],
         );
         if with_hash.is_err() {
             conn.execute(
-                "UPDATE clips SET content=?2, content_html=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7 WHERE id=?1",
+                "UPDATE clips SET content=?2, content_html=NULL, content_rtf=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7 WHERE id=?1",
                 params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind],
             )?;
         }
@@ -606,6 +611,7 @@ impl Db {
             sensitive: row.get::<_, i64>(9)? != 0,
             hash: row.get(10)?,
             content_html: row.get(11)?,
+            content_rtf: row.get(12)?,
             tags: Vec::new(),
         })
     }
@@ -629,6 +635,7 @@ mod tests {
         NewClip {
             content: Some(content.to_string()),
             content_html: None,
+            content_rtf: None,
             content_type: "text".into(),
             image_path: None,
             preview: content.chars().take(80).collect(),
@@ -690,6 +697,7 @@ mod tests {
         NewClip {
             content: Some(content.to_string()),
             content_html: None,
+            content_rtf: None,
             content_type: "text".into(),
             image_path: None,
             preview: content.chars().take(80).collect(),
@@ -874,6 +882,7 @@ mod tests {
         let with_img = NewClip {
             content: None,
             content_html: None,
+            content_rtf: None,
             content_type: "image".into(),
             image_path: Some("X:/tmp/abc.png".into()),
             preview: "Immagine".into(),

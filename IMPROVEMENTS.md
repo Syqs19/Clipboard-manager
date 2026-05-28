@@ -33,8 +33,9 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
   sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
 - ✅ **Più tipi di contenuto**: **file copiati** (CF_HDROP) + **HTML**
-  (CF_HTML letto/scritto via WinAPI, badge "HTML" nella card, bottone
-  "Copia come testo semplice" per incollare senza formattazione).
+  (CF_HTML letto/scritto via WinAPI) + **RTF** (CF_RTF). Badge nella card
+  che indica i formati presenti (HTML / RTF / HTML+RTF), bottone "Copia
+  come testo semplice" per incollare senza formattazione.
 - ✅ **"Incolla come testo semplice"** — bottone dedicato sulle clip con HTML
   che mette solo CF_UNICODETEXT (no formattazione).
 - ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
@@ -51,6 +52,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 ## 🎨 Polish & distribuzione
 
+- ✅ **Badge tastiera 1-9** sulle prime 9 card (promemoria visivo della shortcut).
+- ✅ **Apri posizione file** nelle azioni hover (immagini e file): apre Esplora
+  risorse e seleziona il file (`explorer.exe /select,"path"` con quoting corretto).
+- ✅ **Highlight della ricerca** nelle preview: le occorrenze della query
+  vengono evidenziate in giallo.
 - ✅ **Miniature ridotte** salvate come `<hash>.thumb.png` (200px lato lungo,
   resize bilineare). Backfill all'avvio per le immagini esistenti. La card
   carica la thumb; l'anteprima a tutto schermo usa il PNG originale.
@@ -90,9 +96,10 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ File copiati dall'Explorer (CF_HDROP read/write)
 - ✅ Sistema toast per gli errori in UI
 - ✅ Cattura HTML (CF_HTML) + bottone "Copia come testo semplice"
+- ✅ Cattura RTF (CF_RTF)
+- ✅ Badge tastiera 1-9, Apri posizione file, Highlight ricerca
 
 ### Prossimi candidati (non ancora fatti)
 - Polish & motion (pass animazioni dedicato)
 - Cifratura DB (SQLCipher)
 - README + onboarding al primo avvio
-- RTF (oltre a HTML già fatto)

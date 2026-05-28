@@ -203,6 +203,13 @@ function App() {
     await api.setTagPinned(name, pinned);
     reload();
   };
+  const handleReveal = async (path: string) => {
+    try {
+      await api.revealInExplorer(path);
+    } catch (e) {
+      notify(`Impossibile aprire la cartella: ${e}`, "error");
+    }
+  };
   const handleRenameTag = async (oldName: string, newName: string) => {
     try {
       await api.renameTag(oldName, newName);
@@ -345,6 +352,8 @@ function App() {
             selectModifier={selectModifier}
             selectionMode={selectedIds.size > 0}
             allTags={tags}
+            onReveal={handleReveal}
+            highlightQuery={query}
           />
         </div>
       </main>

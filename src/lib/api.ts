@@ -6,6 +6,7 @@ export interface Clip {
   id: number;
   content: string | null;
   content_html: string | null;
+  content_rtf: string | null;
   content_type: string; // 'text' | 'image' | 'url' | 'files'
   image_path: string | null;
   thumb_path: string | null;
@@ -42,6 +43,8 @@ export const api = {
     invoke<void>("rename_tag", { old, new: newName }),
   bulkRemoveTag: (ids: number[], name: string) =>
     invoke<void>("bulk_remove_tag", { ids, name }),
+  revealInExplorer: (path: string) =>
+    invoke<void>("reveal_in_explorer", { path }),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),

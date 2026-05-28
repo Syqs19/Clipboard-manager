@@ -43,6 +43,30 @@ export function tagColor(name: string, override?: string | null): string {
   return TAG_COLORS[h % TAG_COLORS.length];
 }
 
+/// Splitta `text` in segmenti alternati (testo / match) in base alla query.
+/// Case-insensitive. Se `query` è vuoto, ritorna un solo segmento non-match.
+export function splitMatches(
+  text: string,
+  query: string,
+): Array<{ text: string; match: boolean }> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [{ text, match: false }];
+  const lower = text.toLowerCase();
+  const out: Array<{ text: string; match: boolean }> = [];
+  let i = 0;
+  while (i < text.length) {
+    const at = lower.indexOf(q, i);
+    if (at < 0) {
+      out.push({ text: text.slice(i), match: false });
+      break;
+    }
+    if (at > i) out.push({ text: text.slice(i, at), match: false });
+    out.push({ text: text.slice(at, at + q.length), match: true });
+    i = at + q.length;
+  }
+  return out;
+}
+
 /// Tempo relativo conciso (it).
 export function relativeTime(ms: number): string {
   const diff = Date.now() - ms;

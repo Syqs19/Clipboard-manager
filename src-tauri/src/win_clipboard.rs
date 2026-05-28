@@ -361,3 +361,155 @@ fn build_cf_html_payload(fragment: &str) -> Vec<u8> {
 pub fn write_text_with_html(_plain: &str, _html: &str) -> bool {
     false
 }
+
+/// Legge l'eventuale frammento RTF dalla clipboard (formato "Rich Text Format").
+/// RTF è UTF-8 / ANSI a 7 bit, restituiamo la stringa così com'è.
+#[cfg(windows)]
+pub fn read_rtf() -> Option<String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW,
+    };
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    unsafe {
+        let cf_rtf = RegisterClipboardFormatW(wide("Rich Text Format").as_ptr());
+        if cf_rtf == 0 {
+            return None;
+        }
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return None;
+        }
+        let h = GetClipboardData(cf_rtf);
+        if h.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let ptr = GlobalLock(h) as *const u8;
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+        let size = GlobalSize(h);
+        // RTF è ASCII/UTF-8, tronca su eventuale null terminator
+        let len = std::slice::from_raw_parts(ptr, size)
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(size);
+        let bytes = std::slice::from_raw_parts(ptr, len).to_vec();
+        GlobalUnlock(h);
+        CloseClipboard();
+        let s = String::from_utf8_lossy(&bytes).to_string();
+        if s.trim().is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn read_rtf() -> Option<String> {
+    None
+}
+
+/// Scrive contemporaneamente CF_UNICODETEXT, CF_HTML e CF_RTF nella clipboard.
+/// Passa `None` per saltare il formato relativo. Ritorna true se almeno il testo
+/// plain è stato scritto.
+#[cfg(windows)]
+pub fn write_rich_clipboard(plain: &str, html: Option<&str>, rtf: Option<&str>) -> bool {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    };
+    use windows_sys::Win32::System::Memory::{
+        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+    };
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    unsafe {
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return false;
+        }
+        EmptyClipboard();
+
+        // CF_UNICODETEXT
+        const CF_UNICODETEXT: u32 = 13;
+        let wide_text = wide(plain);
+        let mut ok_txt = false;
+        let h_txt = GlobalAlloc(GMEM_MOVEABLE, wide_text.len() * 2);
+        if !h_txt.is_null() {
+            let p = GlobalLock(h_txt) as *mut u16;
+            if !p.is_null() {
+                std::ptr::copy_nonoverlapping(wide_text.as_ptr(), p, wide_text.len());
+                GlobalUnlock(h_txt);
+                ok_txt = !SetClipboardData(
+                    CF_UNICODETEXT,
+                    h_txt as windows_sys::Win32::Foundation::HANDLE,
+                )
+                .is_null();
+            }
+        }
+
+        // CF_HTML (opzionale)
+        if let Some(html_str) = html {
+            let payload = build_cf_html_payload(html_str);
+            let cf_html_name = wide("HTML Format");
+            let cf_html = RegisterClipboardFormatW(cf_html_name.as_ptr());
+            if cf_html != 0 {
+                let h = GlobalAlloc(GMEM_MOVEABLE, payload.len() + 1);
+                if !h.is_null() {
+                    let p = GlobalLock(h) as *mut u8;
+                    if !p.is_null() {
+                        std::ptr::copy_nonoverlapping(payload.as_ptr(), p, payload.len());
+                        *p.add(payload.len()) = 0;
+                        GlobalUnlock(h);
+                        let _ = SetClipboardData(
+                            cf_html,
+                            h as windows_sys::Win32::Foundation::HANDLE,
+                        );
+                    }
+                }
+            }
+        }
+
+        // CF_RTF (opzionale) — registrato come "Rich Text Format"
+        if let Some(rtf_str) = rtf {
+            let bytes = rtf_str.as_bytes();
+            let cf_rtf_name = wide("Rich Text Format");
+            let cf_rtf = RegisterClipboardFormatW(cf_rtf_name.as_ptr());
+            if cf_rtf != 0 {
+                let h = GlobalAlloc(GMEM_MOVEABLE, bytes.len() + 1);
+                if !h.is_null() {
+                    let p = GlobalLock(h) as *mut u8;
+                    if !p.is_null() {
+                        std::ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
+                        *p.add(bytes.len()) = 0;
+                        GlobalUnlock(h);
+                        let _ = SetClipboardData(
+                            cf_rtf,
+                            h as windows_sys::Win32::Foundation::HANDLE,
+                        );
+                    }
+                }
+            }
+        }
+
+        CloseClipboard();
+        ok_txt
+    }
+}
+
+#[cfg(not(windows))]
+pub fn write_rich_clipboard(_plain: &str, _html: Option<&str>, _rtf: Option<&str>) -> bool {
+    false
+}

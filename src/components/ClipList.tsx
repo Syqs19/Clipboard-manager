@@ -41,6 +41,8 @@ export function ClipList({
   selectModifier,
   selectionMode,
   allTags,
+  onReveal,
+  highlightQuery,
 }: {
   clips: Clip[];
   selectedIndex: number;
@@ -61,6 +63,8 @@ export function ClipList({
   selectModifier: SelectModifier;
   selectionMode: boolean;
   allTags: [string, number, string | null, boolean][];
+  onReveal: (path: string) => void;
+  highlightQuery: string;
 }) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -179,6 +183,7 @@ export function ClipList({
                 clip={clip}
                 selected={i === selectedIndex}
                 copied={clip.id === copiedId}
+                keyHint={i < 9 ? i + 1 : undefined}
                 selectedForBulk={selectedIds.has(clip.id)}
                 onSelect={() => onSelect(i)}
                 colorOf={colorOf}
@@ -191,9 +196,11 @@ export function ClipList({
                 onRemoveTag={onRemoveTag}
                 onSetTagColor={onSetTagColor}
                 onBulkClick={(e) => onBulkClick(i, e)}
+                onReveal={onReveal}
                 selectModifier={selectModifier}
                 selectionMode={selectionMode}
                 allTags={allTags}
+                highlightQuery={highlightQuery}
               />
             </div>
           </div>
