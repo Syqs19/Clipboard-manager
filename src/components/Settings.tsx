@@ -34,6 +34,12 @@ const KIND_LABELS: Record<SensitiveKind, string> = {
   iban: "IBAN",
   card: "Credit cards",
   token: "Tokens / API keys",
+  codice_fiscale: "Codice Fiscale (IT)",
+  ssn: "US SSN",
+  private_key: "Private / SSH keys",
+  jwt: "JWT",
+  crypto: "Crypto addresses",
+  mask: "Masked values (****)",
 };
 
 function Toggle({
@@ -471,7 +477,7 @@ export function Settings({
             <>
               {stats ? (
                 <>
-                  <Row title="Total clips">
+                  <Row title="Total">
                     <span className="text-sm tabular-nums text-zinc-100">
                       {stats.total}
                     </span>

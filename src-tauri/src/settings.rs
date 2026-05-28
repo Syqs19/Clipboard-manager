@@ -20,7 +20,18 @@ pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+V";
 
 /// Categorie considerate sensibili ai fini della cancellazione/non-salvataggio.
 /// Default: tutte. La mascheratura nella UI è indipendente da questa selezione.
-pub const ALL_SENSITIVE_KINDS: &[&str] = &["email", "iban", "card", "token"];
+pub const ALL_SENSITIVE_KINDS: &[&str] = &[
+    "email",
+    "iban",
+    "card",
+    "token",
+    "codice_fiscale",
+    "ssn",
+    "private_key",
+    "jwt",
+    "crypto",
+    "mask",
+];
 
 pub struct RuntimeState {
     /// Cattura in pausa (toggle dal tray).

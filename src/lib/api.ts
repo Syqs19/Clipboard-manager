@@ -84,7 +84,18 @@ export interface Stats {
   images_bytes: number;
 }
 
-export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;
+export const SENSITIVE_KINDS = [
+  "email",
+  "iban",
+  "card",
+  "token",
+  "codice_fiscale",
+  "ssn",
+  "private_key",
+  "jwt",
+  "crypto",
+  "mask",
+] as const;
 export type SensitiveKind = (typeof SENSITIVE_KINDS)[number];
 
 /// Tasto modificatore per attivare la multi-selezione con click sulle clip.
