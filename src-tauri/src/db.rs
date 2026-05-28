@@ -201,10 +201,37 @@ impl Db {
 
     pub fn set_pinned(&self, clip_id: i64, pinned: bool) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "UPDATE clips SET pinned = ?1 WHERE id = ?2",
-            params![pinned as i64, clip_id],
-        )?;
+        if pinned {
+            // nuova pinned: in cima ai fissati (pinned_order = min - 1)
+            let min: Option<i64> = conn.query_row(
+                "SELECT MIN(pinned_order) FROM clips WHERE pinned = 1",
+                [],
+                |r| r.get::<_, Option<i64>>(0),
+            )?;
+            let new_order = min.unwrap_or(0).saturating_sub(1);
+            conn.execute(
+                "UPDATE clips SET pinned = 1, pinned_order = ?1 WHERE id = ?2",
+                params![new_order, clip_id],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE clips SET pinned = 0, pinned_order = NULL WHERE id = ?1",
+                params![clip_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Riassegna `pinned_order` ai fissati nell'ordine dato (0, 1, 2, ...).
+    /// Gli id non pinnati vengono ignorati.
+    pub fn reorder_pinned(&self, ordered_ids: &[i64]) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        for (i, id) in ordered_ids.iter().enumerate() {
+            conn.execute(
+                "UPDATE clips SET pinned_order = ?1 WHERE id = ?2 AND pinned = 1",
+                params![i as i64, id],
+            )?;
+        }
         Ok(())
     }
 

@@ -22,6 +22,7 @@ export const api = {
   copyClip: (id: number) => invoke<void>("copy_clip", { id }),
   togglePin: (id: number, pinned: boolean) =>
     invoke<void>("toggle_pin", { id, pinned }),
+  reorderPinned: (ids: number[]) => invoke<void>("reorder_pinned", { ids }),
   removeClip: (id: number) => invoke<void>("remove_clip", { id }),
   clearHistory: () => invoke<void>("clear_history"),
   listTags: () => invoke<[string, number, string | null][]>("list_tags"),

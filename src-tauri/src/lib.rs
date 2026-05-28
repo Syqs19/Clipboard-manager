@@ -220,6 +220,7 @@ pub fn run() {
             commands::apply_dont_save_sensitive,
             commands::apply_sensitive_ttl,
             commands::apply_sensitive_kinds,
+            commands::reorder_pinned,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

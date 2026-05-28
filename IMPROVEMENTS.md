@@ -28,12 +28,14 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 
 - ✅ **Modifica del contenuto** di un clip (matita in hover → editor inline; al salvataggio
   ricategorizza tipo e sensibilità).
-- ☐ **Riordino drag & drop** dei fissati. Previsto, non fatto.
+- ✅ **Riordino drag & drop** dei fissati — trascina una clip fissata sopra un'altra
+  per riordinare. Persistito su `pinned_order` nel DB.
 - ✅ **Colori dei tag** — color picker nativo (ruota completa) sia dal pallino nella sidebar
   sia dai pallini sui chip nelle card; fallback deterministico dal nome del tag.
 - ☐ **Più tipi di contenuto**: file copiati, HTML/RTF.
 - ☐ **"Incolla come testo semplice"**.
-- ☐ **Raggruppa per data** in cronologia (Oggi / Ieri / ...).
+- ✅ **Raggruppa per data** in cronologia (Fissati / Oggi / Ieri / Questa settimana /
+  Questo mese / Più vecchi). Header sottili tra i gruppi.
 - ☐ **Multi-selezione** + elimina in blocco.
 - ☐ **Export / Import** della cronologia.
 
@@ -59,8 +61,10 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Auto-cancellazione clip sensibili (toggle + TTL + rimozione su ricopia)
 - ✅ Granularità categorie sensibili (multi-checkbox email/IBAN/carte/token)
 - ✅ Impostazioni divise in tab (Generali / Sicurezza / Reset), altezza stabile
+- ✅ Raggruppa per data nella cronologia
+- ✅ Riordino drag & drop delle clip fissate
 
 ### Prossimi candidati (non ancora fatti)
-- Riordino drag & drop dei fissati
-- Raggruppa per data in cronologia
+- Multi-selezione + elimina in blocco
+- Export / Import della cronologia (JSON)
 - README + onboarding al primo avvio

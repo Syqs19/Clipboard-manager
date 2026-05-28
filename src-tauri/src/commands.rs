@@ -64,6 +64,12 @@ pub fn toggle_pin(db: State<Database>, id: i64, pinned: bool) -> Result<(), Stri
     db.set_pinned(id, pinned).map_err(|e| e.to_string())
 }
 
+/// Riordina le clip fissate secondo la lista di id passata (drag & drop).
+#[tauri::command]
+pub fn reorder_pinned(db: State<Database>, ids: Vec<i64>) -> Result<(), String> {
+    db.reorder_pinned(&ids).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
     // elimina anche l'eventuale file immagine associato

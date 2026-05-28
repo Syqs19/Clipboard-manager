@@ -202,6 +202,10 @@ function App() {
             onAddTag={handleAddTag}
             onRemoveTag={handleRemoveTag}
             onSetTagColor={handleSetTagColor}
+            onReorderPinned={async (ids) => {
+              await api.reorderPinned(ids);
+              await reload();
+            }}
           />
         </div>
       </main>
