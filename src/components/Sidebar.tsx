@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useExitAnimation } from "../lib/useExitAnimation";
+import { UpdateButton } from "./UpdateButton";
 import {
   ArrowDownAZ,
   ArrowDownWideNarrow,
@@ -563,6 +564,9 @@ export function Sidebar({
       {/* ActiveBar dei tag fuori dal container scrollabile (evita il
           clipping di overflow-y-auto), ancorata all'aside */}
       <TagActiveBar filter={filter} asideRef={asideRef} scrollRef={tagScrollRef} />
+
+      {/* Update button: appare solo quando c'e' un update disponibile */}
+      <UpdateButton />
     </aside>
   );
 }

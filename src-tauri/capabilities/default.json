@@ -8,6 +8,9 @@
     "core:window:allow-hide",
     "opener:default",
     "store:default",
-    "dialog:default"
+    "dialog:default",
+    "updater:default",
+    "process:default",
+    "process:allow-restart"
   ]
 }
