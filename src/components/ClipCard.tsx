@@ -162,6 +162,7 @@ export function ClipCard({
         <img
           src={convertFileSrc(clip.image_path!)}
           alt={clip.preview}
+          draggable={false}
           className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
         />
       ) : (

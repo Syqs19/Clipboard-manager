@@ -82,7 +82,17 @@ export function ClipList({
   let lastBucket = "";
 
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      className="flex flex-col gap-2"
+      // accetta il drag in tutta l'area lista così il cursore resta "move";
+      // il vero target di drop sono le singole card pinnate sotto.
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragId(null);
+        setDragOverId(null);
+      }}
+    >
       {clips.map((clip, i) => {
         const bucket = bucketOf(clip, now);
         const showHeader = bucket !== lastBucket;
@@ -93,11 +103,12 @@ export function ClipList({
           <div key={clip.id} className="flex flex-col gap-2">
             {showHeader && (
               <div
-                className={`text-[11px] font-semibold uppercase tracking-wider text-zinc-500 ${
-                  i === 0 ? "" : "pt-2"
+                className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300 ${
+                  i === 0 ? "" : "pt-3"
                 }`}
               >
-                {bucket}
+                <span>{bucket}</span>
+                <span className="h-px flex-1 bg-zinc-800" />
               </div>
             )}
             <div
@@ -107,16 +118,25 @@ export function ClipList({
                   ? (e) => {
                       setDragId(clip.id);
                       e.dataTransfer.effectAllowed = "move";
+                      // serve setData per avviare il drag su Chromium
+                      e.dataTransfer.setData("text/plain", String(clip.id));
                     }
                   : undefined
               }
               onDragOver={
                 draggable
                   ? (e) => {
-                      if (dragId == null || dragId === clip.id) return;
+                      // preventDefault DEVE essere chiamato sempre, prima dei check,
+                      // altrimenti il browser mostra il cursore "divieto"
                       e.preventDefault();
                       e.dataTransfer.dropEffect = "move";
-                      if (dragOverId !== clip.id) setDragOverId(clip.id);
+                      if (
+                        dragId != null &&
+                        dragId !== clip.id &&
+                        dragOverId !== clip.id
+                      ) {
+                        setDragOverId(clip.id);
+                      }
                     }
                   : undefined
               }
@@ -140,8 +160,10 @@ export function ClipList({
                 setDragOverId(null);
               }}
               className={`rounded-lg transition-shadow ${
-                isDragOver ? "ring-2 ring-emerald-500/70" : ""
-              } ${dragId === clip.id ? "opacity-50" : ""}`}
+                draggable ? "cursor-move select-none" : ""
+              } ${isDragOver ? "ring-2 ring-emerald-500/70" : ""} ${
+                dragId === clip.id ? "opacity-50" : ""
+              }`}
             >
               <ClipCard
                 clip={clip}
