@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { type Clip, type SelectModifier } from "../lib/api";
+import { TagPicker } from "./TagPicker";
 import { maskSensitive, relativeTime } from "../lib/format";
 
 function IconButton({
@@ -61,6 +62,7 @@ export function ClipCard({
   onBulkClick,
   selectModifier,
   selectionMode,
+  allTags,
 }: {
   clip: Clip;
   selected: boolean;
@@ -79,10 +81,10 @@ export function ClipCard({
   onBulkClick?: (e: React.MouseEvent) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
+  allTags: [string, number, string | null, boolean][];
 }) {
   const [revealed, setRevealed] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [tagInput, setTagInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -94,13 +96,6 @@ export function ClipCard({
   const masked = clip.sensitive && !revealed;
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
-
-  const commitTag = () => {
-    const name = tagInput.trim();
-    if (name) onAddTag(clip.id, name);
-    setTagInput("");
-    setAdding(false);
-  };
 
   const startEdit = () => {
     setEditValue(clip.content ?? "");
@@ -188,7 +183,7 @@ export function ClipCard({
         </div>
       ) : isImage ? (
         <img
-          src={convertFileSrc(clip.image_path!)}
+          src={convertFileSrc(clip.thumb_path ?? clip.image_path!)}
           alt={clip.preview}
           draggable={false}
           className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
@@ -236,37 +231,27 @@ export function ClipCard({
             </span>
           ))}
 
-          {adding ? (
-            <input
-              autoFocus
-              value={tagInput}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitTag();
-                } else if (e.key === "Escape") {
-                  setAdding(false);
-                  setTagInput("");
-                }
-              }}
-              onBlur={() => (tagInput.trim() ? commitTag() : setAdding(false))}
-              placeholder="nuovo tag…"
-              className="w-24 rounded bg-zinc-700/60 px-1.5 py-0.5 text-[11px] text-zinc-100 outline-none ring-1 ring-zinc-600"
-            />
-          ) : (
+          <div className="relative">
             <button
               title="Aggiungi tag"
               onClick={(e) => {
                 e.stopPropagation();
-                setAdding(true);
+                setAdding((v) => !v);
               }}
               className="inline-flex items-center gap-0.5 rounded border border-dashed border-zinc-700 px-1.5 py-0.5 text-[11px] text-zinc-500 opacity-0 transition-opacity hover:text-zinc-300 group-hover:opacity-100"
             >
               <Plus className="h-3 w-3" /> tag
             </button>
-          )}
+            {adding && (
+              <TagPicker
+                tags={allTags}
+                excluded={clip.tags}
+                colorOf={colorOf}
+                onPick={(name) => onAddTag(clip.id, name)}
+                onClose={() => setAdding(false)}
+              />
+            )}
+          </div>
 
           <span className="ml-auto text-[11px] text-zinc-600">
             {relativeTime(clip.created_at)}

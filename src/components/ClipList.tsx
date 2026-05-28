@@ -40,6 +40,7 @@ export function ClipList({
   onBulkClick,
   selectModifier,
   selectionMode,
+  allTags,
 }: {
   clips: Clip[];
   selectedIndex: number;
@@ -59,6 +60,7 @@ export function ClipList({
   onBulkClick: (clipIndex: number, e: React.MouseEvent) => void;
   selectModifier: SelectModifier;
   selectionMode: boolean;
+  allTags: [string, number, string | null, boolean][];
 }) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -191,6 +193,7 @@ export function ClipList({
                 onBulkClick={(e) => onBulkClick(i, e)}
                 selectModifier={selectModifier}
                 selectionMode={selectionMode}
+                allTags={allTags}
               />
             </div>
           </div>

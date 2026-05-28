@@ -124,6 +124,11 @@ impl Handler {
         if !path.exists() {
             images::save_rgba_png(&path, img.width as u32, img.height as u32, &img.bytes)?;
         }
+        // genera la thumbnail (200px lato lungo) se manca
+        let thumb = images::thumb_path_for(&path);
+        if !thumb.exists() {
+            let _ = images::save_thumbnail(&path, &thumb, 200);
+        }
         let new = NewClip {
             content: None,
             content_type: "image".into(),

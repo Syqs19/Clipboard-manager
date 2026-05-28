@@ -39,11 +39,18 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ **Multi-selezione** + elimina in blocco — Ctrl/Alt+click (configurabile) per
   attivare, Shift+click per estendere il range, modalità selezione con checkbox
   e barra di azioni (Elimina, Pinna/Despinna, Aggiungi tag).
-- ☐ **Export / Import** della cronologia.
+- ✅ **Export / Import** della cronologia in JSON (immagini inline base64).
+  Modalità "Unisci" (salta duplicati per hash) e "Sostituisci" (wipe + reinsert).
+- ✅ **Tag picker** condiviso: popover con ricerca + lista + "Crea nuovo" sia
+  sulla card (+tag) sia nella barra multi-selezione.
+- ✅ **Tag fissati** nella sidebar: stella per fissare/sfissare, sezione
+  "Fissati" sopra "Categorie".
 
 ## 🎨 Polish & distribuzione
 
-- ☐ **Miniature ridotte** salvate a parte (ora carica i PNG interi → pesante con tante immagini).
+- ✅ **Miniature ridotte** salvate come `<hash>.thumb.png` (200px lato lungo,
+  resize bilineare). Backfill all'avvio per le immagini esistenti. La card
+  carica la thumb; l'anteprima a tutto schermo usa il PNG originale.
 - ☐ **Auto-update** (`tauri-plugin-updater`) + **CI GitHub Actions** che genera le release.
 - ☐ **Firma del codice** (rimuove l'avviso SmartScreen — richiede certificato a pagamento).
 - ☐ **README** con screenshot + onboarding al primo avvio ("premi Ctrl+Shift+V").
@@ -66,8 +73,11 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Raggruppa per data nella cronologia
 - ✅ Riordino drag & drop delle clip fissate
 - ✅ Multi-selezione con barra di azioni e modifier configurabile
+- ✅ Export / Import JSON con dialog nativo (merge / replace)
+- ✅ Miniature ridotte per le immagini (resize bilineare + backfill)
+- ✅ Tag picker condiviso + tag fissati nella sidebar
 
 ### Prossimi candidati (non ancora fatti)
-- Export / Import della cronologia (JSON)
 - Polish & motion (pass animazioni dedicato)
+- Rinomina tag / rimuovi tag da selezione / sort tag per più usati
 - README + onboarding al primo avvio

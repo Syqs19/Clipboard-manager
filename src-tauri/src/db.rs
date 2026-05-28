@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS tags (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     name    TEXT NOT NULL UNIQUE,
     color   TEXT,
-    is_auto INTEGER NOT NULL DEFAULT 0
+    is_auto INTEGER NOT NULL DEFAULT 0,
+    pinned  INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS clip_tags (
     clip_id INTEGER NOT NULL,
@@ -73,12 +74,14 @@ pub struct Clip {
     pub content: Option<String>,
     pub content_type: String,
     pub image_path: Option<String>,
+    pub thumb_path: Option<String>,
     pub preview: String,
     pub created_at: i64,
     pub pinned: bool,
     pub pinned_order: Option<i64>,
     pub char_count: i64,
     pub sensitive: bool,
+    pub hash: String,
     pub tags: Vec<String>,
 }
 
@@ -101,7 +104,7 @@ pub struct Db {
 }
 
 const SELECT_COLS: &str =
-    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive";
+    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash";
 
 impl Db {
     pub fn open<P: AsRef<Path>>(path: P) -> rusqlite::Result<Self> {
@@ -116,8 +119,12 @@ impl Db {
     fn init(conn: Connection) -> rusqlite::Result<Self> {
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
         conn.execute_batch(SCHEMA)?;
-        // migrazione additiva per DB pre-esistenti (colonna aggiunta dopo il rilascio)
+        // migrazione additiva per DB pre-esistenti (colonne aggiunte dopo il rilascio)
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN sensitive_kind TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE tags ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -219,6 +226,21 @@ impl Db {
                 params![clip_id],
             )?;
         }
+        Ok(())
+    }
+
+    /// Imposta direttamente `pinned` e `pinned_order` (usato dall'import).
+    pub fn set_pin_raw(
+        &self,
+        clip_id: i64,
+        pinned: bool,
+        pinned_order: Option<i64>,
+    ) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE clips SET pinned = ?1, pinned_order = ?2 WHERE id = ?3",
+            params![pinned as i64, pinned_order, clip_id],
+        )?;
         Ok(())
     }
 
@@ -405,18 +427,60 @@ impl Db {
         Ok(())
     }
 
-    /// (nome_tag, conteggio_clip, colore) per la sidebar "Categorie".
-    pub fn list_tags_with_counts(&self) -> rusqlite::Result<Vec<(String, i64, Option<String>)>> {
+    /// (nome_tag, conteggio_clip, colore, pinned) per la sidebar "Categorie".
+    pub fn list_tags_with_counts(
+        &self,
+    ) -> rusqlite::Result<Vec<(String, i64, Option<String>, bool)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT t.name, COUNT(ct.clip_id) AS n, t.color
+            "SELECT t.name, COUNT(ct.clip_id) AS n, t.color, t.pinned
              FROM tags t LEFT JOIN clip_tags ct ON ct.tag_id = t.id
-             GROUP BY t.id HAVING n > 0 ORDER BY t.name",
+             GROUP BY t.id HAVING n > 0
+             ORDER BY t.pinned DESC, t.name",
         )?;
         let rows = stmt.query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, i64>(3)? != 0,
+            ))
         })?;
         rows.collect()
+    }
+
+    /// Fissa/sfissa un tag nella sidebar.
+    pub fn set_tag_pinned(&self, name: &str, pinned: bool) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE tags SET pinned = ?2 WHERE name = ?1",
+            params![name, pinned as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Tutti i tag con colore e flag is_auto (usato dall'export).
+    pub fn list_all_tags(&self) -> rusqlite::Result<Vec<(String, Option<String>, bool)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT name, color, is_auto FROM tags ORDER BY name")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, i64>(2)? != 0,
+            ))
+        })?;
+        rows.collect()
+    }
+
+    /// Svuota completamente la cronologia (usato dall'import in modalità "replace").
+    /// Le immagini su disco vanno rimosse dal chiamante prima di invocarla.
+    pub fn wipe_all(&self) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM clips", [])?;
+        conn.execute("DELETE FROM tags", [])?;
+        Ok(())
     }
 
     /// Imposta il colore (hex) di un tag.
@@ -469,17 +533,25 @@ impl Db {
     }
 
     fn map_row(row: &Row) -> rusqlite::Result<Clip> {
+        let image_path: Option<String> = row.get(3)?;
+        let thumb_path = image_path.as_deref().map(|p| {
+            crate::images::thumb_path_for(std::path::Path::new(p))
+                .to_string_lossy()
+                .to_string()
+        });
         Ok(Clip {
             id: row.get(0)?,
             content: row.get(1)?,
             content_type: row.get(2)?,
-            image_path: row.get(3)?,
+            image_path,
+            thumb_path,
             preview: row.get(4)?,
             created_at: row.get(5)?,
             pinned: row.get::<_, i64>(6)? != 0,
             pinned_order: row.get(7)?,
             char_count: row.get(8)?,
             sensitive: row.get::<_, i64>(9)? != 0,
+            hash: row.get(10)?,
             tags: Vec::new(),
         })
     }
@@ -553,7 +625,10 @@ mod tests {
         let tag = db.get_or_create_tag("Codice", Some("#888"), true).unwrap();
         db.attach_tag(keep, tag).unwrap();
         let counts = db.list_tags_with_counts().unwrap();
-        assert_eq!(counts, vec![("Codice".to_string(), 1, Some("#888".to_string()))]);
+        assert_eq!(
+            counts,
+            vec![("Codice".to_string(), 1, Some("#888".to_string()), false)]
+        );
     }
 
     #[test]

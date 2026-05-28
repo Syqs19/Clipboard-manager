@@ -7,12 +7,14 @@ export interface Clip {
   content: string | null;
   content_type: string; // 'text' | 'image' | 'url'
   image_path: string | null;
+  thumb_path: string | null;
   preview: string;
   created_at: number; // unix millis
   pinned: boolean;
   pinned_order: number | null;
   char_count: number;
   sensitive: boolean;
+  hash: string;
   tags: string[];
 }
 
@@ -30,7 +32,10 @@ export const api = {
   bulkAddTag: (ids: number[], name: string) =>
     invoke<void>("bulk_add_tag", { ids, name }),
   clearHistory: () => invoke<void>("clear_history"),
-  listTags: () => invoke<[string, number, string | null][]>("list_tags"),
+  listTags: () =>
+    invoke<[string, number, string | null, boolean][]>("list_tags"),
+  setTagPinned: (name: string, pinned: boolean) =>
+    invoke<void>("set_tag_pinned", { name, pinned }),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),
@@ -49,6 +54,10 @@ export const api = {
     invoke<void>("apply_sensitive_ttl", { minutes }),
   applySensitiveKinds: (kinds: string[]) =>
     invoke<void>("apply_sensitive_kinds", { kinds }),
+  exportHistory: (path: string) =>
+    invoke<number>("export_history", { path }),
+  importHistory: (path: string, mode: "merge" | "replace") =>
+    invoke<number>("import_history", { path, mode }),
 };
 
 export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;

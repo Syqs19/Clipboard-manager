@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { X, Trash2, Keyboard } from "lucide-react";
+import { X, Trash2, Keyboard, Download, Upload } from "lucide-react";
 import { Store } from "@tauri-apps/plugin-store";
+import {
+  open as openDialog,
+  save as saveDialog,
+  message as messageDialog,
+} from "@tauri-apps/plugin-dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import {
   api,
@@ -193,6 +198,47 @@ export function Settings({
     await api.clearHistory();
     setConfirmClear(false);
     onReload();
+  };
+  const onExport = async () => {
+    const path = await saveDialog({
+      title: "Esporta cronologia",
+      defaultPath: `clipboard-export-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!path) return;
+    try {
+      const n = await api.exportHistory(path);
+      await messageDialog(`${n} clip esportate in:\n${path}`, {
+        title: "Export completato",
+      });
+    } catch (e) {
+      await messageDialog(`Errore durante l'export: ${e}`, {
+        title: "Export fallito",
+        kind: "error",
+      });
+    }
+  };
+  const onImport = async (mode: "merge" | "replace") => {
+    const selected = await openDialog({
+      title: "Importa cronologia",
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!selected || typeof selected !== "string") return;
+    try {
+      const n = await api.importHistory(selected, mode);
+      const summary =
+        mode === "replace"
+          ? `Cronologia sostituita: ${n} clip caricate dal file.`
+          : `${n} nuove clip aggiunte (le clip con stesso contenuto già presenti sono state ignorate).`;
+      await messageDialog(summary, { title: "Import completato" });
+      onReload();
+    } catch (e) {
+      await messageDialog(`Errore durante l'import: ${e}`, {
+        title: "Import fallito",
+        kind: "error",
+      });
+    }
   };
   const onDontSaveSensitive = async (v: boolean) => {
     setDontSaveSensitive(v);
@@ -396,10 +442,47 @@ export function Settings({
           )}
 
           {tab === "reset" && (
-            <Row
-              title="Pulisci cronologia"
-              hint="Svuota la cronologia ma mantiene le clip fissate"
-            >
+            <>
+              <Row
+                title="Esporta cronologia"
+                hint="Salva tutte le clip (incluse immagini) in un file JSON"
+              >
+                <button
+                  onClick={onExport}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  <Download className="h-3.5 w-3.5" /> Esporta
+                </button>
+              </Row>
+
+              <Row
+                title="Importa cronologia (unisci)"
+                hint="Aggiunge solo le clip nuove dal file (i duplicati sono saltati)"
+              >
+                <button
+                  onClick={() => onImport("merge")}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  <Upload className="h-3.5 w-3.5" /> Unisci
+                </button>
+              </Row>
+
+              <Row
+                title="Importa cronologia (sostituisci)"
+                hint="Cancella la cronologia attuale e la rimpiazza con quella del file"
+              >
+                <button
+                  onClick={() => onImport("replace")}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 px-2.5 py-1 text-sm text-red-400 hover:bg-red-500/10"
+                >
+                  <Upload className="h-3.5 w-3.5" /> Sostituisci
+                </button>
+              </Row>
+
+              <Row
+                title="Pulisci cronologia"
+                hint="Svuota la cronologia ma mantiene le clip fissate"
+              >
             {confirmClear ? (
               <div className="flex gap-2">
                 <button
@@ -423,7 +506,8 @@ export function Settings({
                 <Trash2 className="h-3.5 w-3.5" /> Pulisci
               </button>
             )}
-            </Row>
+              </Row>
+            </>
           )}
         </div>
       </div>

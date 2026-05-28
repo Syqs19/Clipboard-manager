@@ -18,6 +18,7 @@ use tauri_plugin_store::StoreExt;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -51,7 +52,15 @@ pub fn run() {
             let images_dir = data_dir.join("images");
             std::fs::create_dir_all(&images_dir).ok();
             if let Ok(referenced) = database.all_image_paths() {
-                let keep: std::collections::HashSet<String> = referenced.into_iter().collect();
+                let keep: std::collections::HashSet<String> = referenced
+                    .iter()
+                    .flat_map(|p| {
+                        let thumb = images::thumb_path_for(std::path::Path::new(p))
+                            .to_string_lossy()
+                            .to_string();
+                        [p.clone(), thumb]
+                    })
+                    .collect();
                 if let Ok(entries) = std::fs::read_dir(&images_dir) {
                     for entry in entries.flatten() {
                         let p = entry.path();
@@ -146,6 +155,23 @@ pub fn run() {
                 eprintln!("[backfill] errore: {e}");
             }
 
+            // backfill thumbnail per PNG esistenti senza .thumb.png (idempotente)
+            if let Ok(entries) = std::fs::read_dir(&images_dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    let name = p.file_name().map(|s| s.to_string_lossy().to_string());
+                    let is_png = name.as_deref().is_some_and(|n| n.ends_with(".png"));
+                    let is_thumb = name.as_deref().is_some_and(|n| n.ends_with(".thumb.png"));
+                    if !is_png || is_thumb {
+                        continue;
+                    }
+                    let thumb = images::thumb_path_for(&p);
+                    if !thumb.exists() {
+                        let _ = images::save_thumbnail(&p, &thumb, 200);
+                    }
+                }
+            }
+
             // avvia il monitoraggio della clipboard in background
             clipboard_watcher::start(
                 app.handle().clone(),
@@ -224,6 +250,9 @@ pub fn run() {
             commands::remove_clips,
             commands::bulk_set_pinned,
             commands::bulk_add_tag,
+            commands::export_history,
+            commands::import_history,
+            commands::set_tag_pinned,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

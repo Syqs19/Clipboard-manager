@@ -20,7 +20,9 @@ import { SelectionBar } from "./components/SelectionBar";
 
 function App() {
   const [clips, setClips] = useState<Clip[]>([]);
-  const [tags, setTags] = useState<[string, number, string | null][]>([]);
+  const [tags, setTags] = useState<[string, number, string | null, boolean][]>(
+    [],
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -193,6 +195,10 @@ function App() {
     await api.setTagColor(name, color);
     reload();
   };
+  const handleSetTagPinned = async (name: string, pinned: boolean) => {
+    await api.setTagPinned(name, pinned);
+    reload();
+  };
 
   // multi-selezione: Ctrl/Cmd+click toggle, Shift+click range
   const onCardBulkClick = (clipIndex: number, e: React.MouseEvent) => {
@@ -261,6 +267,7 @@ function App() {
         imageCount={imageCount}
         totalCount={clips.length}
         onSetTagColor={handleSetTagColor}
+        onSetTagPinned={handleSetTagPinned}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-zinc-800 p-3">
@@ -281,6 +288,8 @@ function App() {
               count={selectedIds.size}
               anyPinned={anyPinned}
               allPinned={allPinned}
+              allTags={tags}
+              colorOf={colorOf}
               onClear={clearSelection}
               onDelete={deleteSelected}
               onTogglePin={togglePinSelected}
@@ -309,6 +318,7 @@ function App() {
             onBulkClick={onCardBulkClick}
             selectModifier={selectModifier}
             selectionMode={selectedIds.size > 0}
+            allTags={tags}
           />
         </div>
       </main>
