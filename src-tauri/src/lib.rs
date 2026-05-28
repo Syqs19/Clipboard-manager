@@ -129,6 +129,8 @@ pub fn run() {
             commands::list_tags,
             commands::add_tag,
             commands::remove_tag,
+            commands::set_tag_color,
+            commands::update_clip,
             commands::apply_max_history,
             commands::apply_close_to_tray,
             commands::apply_hotkey,

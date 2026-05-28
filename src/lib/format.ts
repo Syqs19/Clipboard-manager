@@ -22,6 +22,27 @@ export function maskSensitive(text: string): string {
   return `${head}${dots}${tail}`;
 }
 
+/// Palette di colori preset per i tag (picker).
+export const TAG_COLORS = [
+  "#ef4444",
+  "#f59e0b",
+  "#10b981",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#a1a1aa",
+];
+
+/// Colore di un tag (hex): usa l'override salvato, altrimenti uno deterministico
+/// dal nome (preso dalla palette, così è sempre un hex valido per <input type=color>).
+export function tagColor(name: string, override?: string | null): string {
+  if (override) return override;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return TAG_COLORS[h % TAG_COLORS.length];
+}
+
 /// Tempo relativo conciso (it).
 export function relativeTime(ms: number): string {
   const diff = Date.now() - ms;

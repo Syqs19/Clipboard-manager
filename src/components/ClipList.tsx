@@ -4,18 +4,28 @@ import { ClipCard } from "./ClipCard";
 
 export function ClipList({
   clips,
+  selectedIndex,
+  copiedId,
+  onSelect,
+  colorOf,
   onCopy,
   onPreview,
   onTogglePin,
   onDelete,
+  onUpdate,
   onAddTag,
   onRemoveTag,
 }: {
   clips: Clip[];
+  selectedIndex: number;
+  copiedId: number | null;
+  onSelect: (index: number) => void;
+  colorOf: (name: string) => string;
   onCopy: (id: number) => void;
   onPreview: (clip: Clip) => void;
   onTogglePin: (clip: Clip) => void;
   onDelete: (id: number) => void;
+  onUpdate: (id: number, content: string) => void;
   onAddTag: (id: number, name: string) => void;
   onRemoveTag: (id: number, name: string) => void;
 }) {
@@ -30,14 +40,19 @@ export function ClipList({
 
   return (
     <div className="flex flex-col gap-2">
-      {clips.map((clip) => (
+      {clips.map((clip, i) => (
         <ClipCard
           key={clip.id}
           clip={clip}
+          selected={i === selectedIndex}
+          copied={clip.id === copiedId}
+          onSelect={() => onSelect(i)}
+          colorOf={colorOf}
           onCopy={onCopy}
           onPreview={onPreview}
           onTogglePin={onTogglePin}
           onDelete={onDelete}
+          onUpdate={onUpdate}
           onAddTag={onAddTag}
           onRemoveTag={onRemoveTag}
         />

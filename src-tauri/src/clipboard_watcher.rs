@@ -82,7 +82,7 @@ impl Handler {
         if let Ok(tag_id) = self.db.get_or_create_tag(cat.tag, None, true) {
             let _ = self.db.attach_tag(id, tag_id);
         }
-        self.finish();
+        self.finish(id);
         Ok(())
     }
 
@@ -108,15 +108,15 @@ impl Handler {
             hash,
         };
         // niente tag automatico: le immagini hanno la loro sezione dedicata
-        self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
-        self.finish();
+        let id = self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
+        self.finish(id);
         Ok(())
     }
 
-    /// Pota la cronologia e notifica il frontend.
-    fn finish(&self) {
+    /// Pota la cronologia e notifica il frontend (con l'id appena aggiunto/risalito).
+    fn finish(&self, id: i64) {
         let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
-        let _ = self.app.emit("clips-changed", ());
+        let _ = self.app.emit("clips-changed", id);
     }
 }
 

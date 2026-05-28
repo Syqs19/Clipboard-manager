@@ -29,10 +29,9 @@ pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, Str
     }
 }
 
-/// Copia il contenuto completo della clip nella clipboard di sistema
+/// Mette il contenuto completo della clip nella clipboard di sistema
 /// (testo intero per i sensibili, immagine ricostruita dal PNG per le immagini).
-#[tauri::command]
-pub fn copy_clip(db: State<Database>, id: i64) -> Result<(), String> {
+fn write_clip_to_clipboard(db: &Db, id: i64) -> Result<(), String> {
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
@@ -53,6 +52,11 @@ pub fn copy_clip(db: State<Database>, id: i64) -> Result<(), String> {
         cb.set_text(content).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn copy_clip(db: State<Database>, id: i64) -> Result<(), String> {
+    write_clip_to_clipboard(db.inner(), id)
 }
 
 #[tauri::command]
@@ -77,8 +81,31 @@ pub fn clear_history(db: State<Database>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn list_tags(db: State<Database>) -> Result<Vec<(String, i64)>, String> {
+pub fn list_tags(db: State<Database>) -> Result<Vec<(String, i64, Option<String>)>, String> {
     db.list_tags_with_counts().map_err(|e| e.to_string())
+}
+
+/// Imposta il colore di un tag.
+#[tauri::command]
+pub fn set_tag_color(db: State<Database>, name: String, color: String) -> Result<(), String> {
+    db.set_tag_color(name.trim(), &color).map_err(|e| e.to_string())
+}
+
+/// Modifica il contenuto testuale di un clip (ricategorizza tipo e sensibilità).
+#[tauri::command]
+pub fn update_clip(db: State<Database>, id: i64, content: String) -> Result<(), String> {
+    let cat = crate::categorizer::categorize(&content);
+    let preview: String = content.trim().chars().take(200).collect();
+    db.update_clip_content(
+        id,
+        &content,
+        cat.content_type,
+        &preview,
+        content.chars().count() as i64,
+        cat.sensitive,
+        &crate::db::content_hash(&content),
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Aggiunge un tag manuale (creandolo se non esiste) a una clip.

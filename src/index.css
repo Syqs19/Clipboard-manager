@@ -19,6 +19,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* color picker dei tag: pallino tondo senza bordi */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 9999px;
+}
+
 /* scrollbar discreta, stile Raycast */
 ::-webkit-scrollbar {
   width: 8px;

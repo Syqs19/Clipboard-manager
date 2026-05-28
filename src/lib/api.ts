@@ -24,10 +24,14 @@ export const api = {
     invoke<void>("toggle_pin", { id, pinned }),
   removeClip: (id: number) => invoke<void>("remove_clip", { id }),
   clearHistory: () => invoke<void>("clear_history"),
-  listTags: () => invoke<[string, number][]>("list_tags"),
+  listTags: () => invoke<[string, number, string | null][]>("list_tags"),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),
+  setTagColor: (name: string, color: string) =>
+    invoke<void>("set_tag_color", { name, color }),
+  updateClip: (id: number, content: string) =>
+    invoke<void>("update_clip", { id, content }),
   applyMaxHistory: (value: number) =>
     invoke<void>("apply_max_history", { value }),
   applyCloseToTray: (value: boolean) =>
@@ -40,7 +44,9 @@ export function onOpenSettings(cb: () => void): Promise<UnlistenFn> {
   return listen("open-settings", cb);
 }
 
-/// Si registra agli eventi "clips-changed" emessi dal watcher.
-export function onClipsChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen("clips-changed", cb);
+/// Si registra agli eventi "clips-changed" (payload: id del clip aggiunto/risalito).
+export function onClipsChanged(
+  cb: (id: number | null) => void,
+): Promise<UnlistenFn> {
+  return listen<number>("clips-changed", (e) => cb(e.payload));
 }

@@ -283,16 +283,51 @@ impl Db {
         Ok(())
     }
 
-    /// (nome_tag, conteggio_clip) per la sidebar "Categorie".
-    pub fn list_tags_with_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+    /// (nome_tag, conteggio_clip, colore) per la sidebar "Categorie".
+    pub fn list_tags_with_counts(&self) -> rusqlite::Result<Vec<(String, i64, Option<String>)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT t.name, COUNT(ct.clip_id) AS n
+            "SELECT t.name, COUNT(ct.clip_id) AS n, t.color
              FROM tags t LEFT JOIN clip_tags ct ON ct.tag_id = t.id
              GROUP BY t.id HAVING n > 0 ORDER BY t.name",
         )?;
-        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?))
+        })?;
         rows.collect()
+    }
+
+    /// Imposta il colore (hex) di un tag.
+    pub fn set_tag_color(&self, name: &str, color: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE tags SET color = ?2 WHERE name = ?1", params![name, color])?;
+        Ok(())
+    }
+
+    /// Aggiorna il contenuto di un clip (modifica manuale). In caso di conflitto
+    /// di hash (UNIQUE), aggiorna tutto tranne l'hash.
+    pub fn update_clip_content(
+        &self,
+        id: i64,
+        content: &str,
+        content_type: &str,
+        preview: &str,
+        char_count: i64,
+        sensitive: bool,
+        hash: &str,
+    ) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let with_hash = conn.execute(
+            "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6, hash=?7 WHERE id=?1",
+            params![id, content, content_type, preview, char_count, sensitive as i64, hash],
+        );
+        if with_hash.is_err() {
+            conn.execute(
+                "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6 WHERE id=?1",
+                params![id, content, content_type, preview, char_count, sensitive as i64],
+            )?;
+        }
+        Ok(())
     }
 
     // ----- helper privati (assumono il lock già acquisito) -----
