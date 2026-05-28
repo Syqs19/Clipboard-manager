@@ -13,7 +13,13 @@ body,
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  background-color: #18181b; /* zinc-900 */
+  /* Sfondo a leggero gradiente verde sottile per dare profondità senza
+     uscire dalla palette (verde + grigi scuri). */
+  background-color: #0f0f12;
+  background-image:
+    radial-gradient(at 18% 0%, rgba(16, 185, 129, 0.07) 0%, transparent 42%),
+    radial-gradient(at 90% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+  background-attachment: fixed;
   color: #e4e4e7; /* zinc-200 */
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -125,6 +131,64 @@ input[type="color"]::-webkit-color-swatch {
   transform-origin: left center;
   animation: anim-grow-x 160ms cubic-bezier(0.4, 0, 0.2, 1) 150ms both;
 }
+/* Uscita inversa: prima si ritira l'orizzontale, poi la verticale */
+@keyframes anim-shrink-y {
+  from { transform: scaleY(1); }
+  to   { transform: scaleY(0); }
+}
+@keyframes anim-shrink-x {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+.guide-shrink-y {
+  transform-origin: top center;
+  animation: anim-shrink-y 180ms cubic-bezier(0.4, 0, 0.2, 1) 150ms both;
+}
+.guide-shrink-x {
+  transform-origin: left center;
+  animation: anim-shrink-x 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Eliminazione card: fade + restringimento + leggero slide a sinistra.
+   Compatta anche margin/height per evitare salti visivi delle card sotto. */
+@keyframes anim-clip-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    max-height: 240px;
+    margin-bottom: 0.5rem;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateX(-12px);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
+}
+.anim-clip-exit {
+  animation: anim-clip-exit 240ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Toast: entrata da destra (slide-in-right), uscita verso destra */
+@keyframes anim-slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+@keyframes anim-slide-out-right {
+  from { opacity: 1; transform: translateX(0);    }
+  to   { opacity: 0; transform: translateX(20px); }
+}
+.anim-slide-in-right {
+  animation: anim-slide-in-right 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-slide-out-right {
+  animation: anim-slide-out-right 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
 
 /* Easing "back-out" usato per il feedback "Copiato": overshoot percepibile
    ma non distrante. Il pairing con duration-500 dà al bounce respiro. */
@@ -132,19 +196,32 @@ input[type="color"]::-webkit-color-swatch {
   transition-timing-function: cubic-bezier(0.34, 2, 0.4, 1);
 }
 
-/* Card hover lift: applicata in ClipCard con la classe `card-lift`.
+/* Card hover lift + leggero effetto glass.
    Combina shadow + translate piccolo, GPU-friendly (no layout). */
 .card-lift {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.02) inset;
   transition:
     transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 160ms ease-out,
+    box-shadow 200ms ease-out,
     background-color 280ms ease-out,
     border-color 280ms ease-out;
   will-change: transform;
 }
 .card-lift:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 6px 18px -8px rgba(0, 0, 0, 0.6),
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Glow emerald sottile per stati attivi/copiati: usato componendo
+   con `ring-emerald-500/40` ecc nei componenti. */
+.glow-emerald {
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.4),
+    0 0 24px -6px rgba(16, 185, 129, 0.35);
 }
 
 /* ---------- View Transitions per il riordino dei fissati ----------
@@ -170,7 +247,12 @@ input[type="color"]::-webkit-color-swatch {
   .anim-scale-out,
   .anim-pulse-soft,
   .guide-grow-y,
-  .guide-grow-x {
+  .guide-grow-x,
+  .guide-shrink-y,
+  .guide-shrink-x,
+  .anim-clip-exit,
+  .anim-slide-in-right,
+  .anim-slide-out-right {
     animation: none !important;
   }
   .card-lift {

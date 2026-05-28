@@ -6,7 +6,7 @@
 
 use crate::crypto::MasterKey;
 use crate::db::{Clip, Db, NewClip};
-use crate::settings::RuntimeState;
+use crate::settings::{LastSelfWrite, RuntimeState};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -40,17 +40,32 @@ pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, Str
 /// (testo intero per i sensibili, immagine ricostruita dal PNG per le immagini).
 /// Se `as_plain` è true, una clip con HTML viene copiata SOLO come testo (utile per
 /// "Incolla come testo semplice").
-fn write_clip_to_clipboard(db: &Db, key: &MasterKey, id: i64, as_plain: bool) -> Result<(), String> {
+fn write_clip_to_clipboard(
+    db: &Db,
+    key: &MasterKey,
+    last_self_write: &LastSelfWrite,
+    id: i64,
+    as_plain: bool,
+) -> Result<(), String> {
     let clip = db
         .get_clip(id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "clip non trovata".to_string())?;
     let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
 
+    // segnala al watcher: il prossimo evento clipboard con questo hash
+    // è una nostra scrittura, va ignorato (niente "auto-bump" della clip).
+    let mark_self_write = |hash: String| {
+        if let Ok(mut g) = last_self_write.lock() {
+            *g = Some(hash);
+        }
+    };
+
     if clip.content_type == "image" {
         if let Some(path) = clip.image_path {
             let (w, h, rgba) =
                 crate::images::load_png_rgba(std::path::Path::new(&path), key)?;
+            mark_self_write(crate::db::bytes_hash(&rgba));
             cb.set_image(arboard::ImageData {
                 width: w as usize,
                 height: h as usize,
@@ -63,11 +78,16 @@ fn write_clip_to_clipboard(db: &Db, key: &MasterKey, id: i64, as_plain: bool) ->
         if let Some(json) = clip.content {
             let paths: Vec<String> =
                 serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            // l'hash usato dal watcher è quello del JSON serializzato dai path
+            let watcher_json =
+                serde_json::to_string(&paths).map_err(|e| e.to_string())?;
+            mark_self_write(crate::db::content_hash(&watcher_json));
             if !crate::win_clipboard::write_file_drop(&paths) {
                 return Err("Impossibile scrivere la lista di file nella clipboard".into());
             }
         }
     } else if let Some(content) = clip.content {
+        mark_self_write(crate::db::content_hash(&content));
         // se sono disponibili versioni formattate (HTML/RTF) e l'utente non
         // ha chiesto "plain", le scriviamo accanto al testo così l'incolla
         // mantiene la formattazione
@@ -90,10 +110,17 @@ fn write_clip_to_clipboard(db: &Db, key: &MasterKey, id: i64, as_plain: bool) ->
 pub fn copy_clip(
     db: State<Database>,
     key: State<Key>,
+    last_self_write: State<LastSelfWrite>,
     id: i64,
     as_plain: Option<bool>,
 ) -> Result<(), String> {
-    write_clip_to_clipboard(db.inner(), key.inner(), id, as_plain.unwrap_or(false))
+    write_clip_to_clipboard(
+        db.inner(),
+        key.inner(),
+        last_self_write.inner(),
+        id,
+        as_plain.unwrap_or(false),
+    )
 }
 
 /// Restituisce i byte PNG (decifrati) di un'immagine salvata su disco, così

@@ -6,7 +6,14 @@
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicI64};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
+
+/// Hash dell'ultimo contenuto scritto nella clipboard **dall'app stessa**
+/// (es. quando l'utente copia una clip dalla cronologia). Il watcher lo
+/// confronta col contenuto del prossimo evento clipboard: se coincide,
+/// non rielabora (evita il fastidioso "auto-bump" della clip in cima a
+/// ogni copia interna). Consume-on-match: viene messo a None dopo l'uso.
+pub type LastSelfWrite = Arc<Mutex<Option<String>>>;
 
 pub const DEFAULT_MAX_HISTORY: i64 = 200;
 pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+V";

@@ -129,7 +129,9 @@ function App() {
         e.preventDefault();
         setSelectedIndex((i) => Math.max(0, i - 1));
       } else if (e.key === "Enter") {
-        if (tag === "TEXTAREA") return; // a capo nell'editor
+        if (tag === "TEXTAREA") return; // a capo nell'editor inline
+        // Nota: i campi che vogliono "consumare" Enter (es. rename tag)
+        // devono chiamare e.stopPropagation() nel proprio handler.
         const c = list[selRef.current];
         if (c) {
           e.preventDefault();
@@ -313,7 +315,7 @@ function App() {
     tagColor(name, tags.find((t) => t[0] === name)?.[2] ?? null);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-900 text-zinc-100">
+    <div className="flex h-screen w-screen overflow-hidden bg-transparent text-zinc-100">
       <Sidebar
         filter={filter}
         onSelect={setFilter}
@@ -331,19 +333,19 @@ function App() {
         onRenameTag={handleRenameTag}
       />
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-zinc-800 p-3">
+        <div className="flex items-center gap-2 border-b border-zinc-800/60 p-4">
           <div className="flex-1">
             <SearchBar value={query} onChange={setQuery} />
           </div>
           <button
             onClick={() => setSettingsOpen(true)}
             title="Impostazioni"
-            className="rounded-lg border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-400 transition-colors hover:text-zinc-100"
+            className="rounded-lg border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-400 transition-colors hover:text-zinc-100 hover:bg-zinc-800/80"
           >
             <SettingsIcon className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {selectedIds.size > 0 && (
             <SelectionBar
               count={selectedIds.size}

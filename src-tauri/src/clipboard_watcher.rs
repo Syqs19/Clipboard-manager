@@ -7,6 +7,7 @@
 
 use crate::crypto::MasterKey;
 use crate::db::{self, Db, NewClip};
+use crate::settings::LastSelfWrite;
 use crate::{categorizer, images, win_clipboard};
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
 use std::collections::HashSet;
@@ -28,6 +29,10 @@ struct Handler {
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
     last_hash: Option<String>,
+    /// Hash dell'ultima scrittura "self" (l'app ha copiato una clip dalla
+    /// cronologia): se l'evento clipboard combacia, lo ignoriamo per non
+    /// auto-bumpare la clip in cima.
+    last_self_write: LastSelfWrite,
 }
 
 impl ClipboardHandler for Handler {
@@ -48,6 +53,22 @@ impl ClipboardHandler for Handler {
 }
 
 impl Handler {
+    /// Restituisce true se l'hash combacia con l'ultima self-write: in tal
+    /// caso "consume" il valore (lo resetta a None) e aggiorna last_hash
+    /// per evitare ricatture immediate.
+    fn consume_self_write(&mut self, hash: &str) -> bool {
+        let mut guard = match self.last_self_write.lock() {
+            Ok(g) => g,
+            Err(_) => return false,
+        };
+        if guard.as_deref() == Some(hash) {
+            *guard = None;
+            self.last_hash = Some(hash.to_string());
+            return true;
+        }
+        false
+    }
+
     fn capture(&mut self) -> Result<(), String> {
         // Rispetta i formati di esclusione dei password manager.
         if win_clipboard::should_skip() {
@@ -77,6 +98,9 @@ impl Handler {
         let json = serde_json::to_string(&files).map_err(|e| e.to_string())?;
         let hash = db::content_hash(&json);
         if self.last_hash.as_deref() == Some(hash.as_str()) {
+            return Ok(());
+        }
+        if self.consume_self_write(&hash) {
             return Ok(());
         }
         self.last_hash = Some(hash.clone());
@@ -112,6 +136,9 @@ impl Handler {
         if self.last_hash.as_deref() == Some(hash.as_str()) {
             return Ok(());
         }
+        if self.consume_self_write(&hash) {
+            return Ok(());
+        }
         self.last_hash = Some(hash.clone());
 
         let cat = categorizer::categorize(&text);
@@ -136,9 +163,14 @@ impl Handler {
         }
         let preview: String = text.trim().chars().take(200).collect();
         // se la clipboard contiene anche i formati HTML / RTF, li conserviamo
-        // per supportare "Copia con formattazione" / "Copia come testo semplice"
-        let html = win_clipboard::read_html();
-        let rtf = win_clipboard::read_rtf();
+        // per supportare "Copia con formattazione" / "Copia come testo semplice".
+        // Sui contenuti sensibili però scartiamo HTML/RTF: il markup può
+        // contenere classi/stili/link che rivelano provenienza o contesto.
+        let (html, rtf) = if cat.sensitive {
+            (None, None)
+        } else {
+            (win_clipboard::read_html(), win_clipboard::read_rtf())
+        };
         let new = NewClip {
             content: Some(text.clone()),
             content_html: html,
@@ -163,6 +195,9 @@ impl Handler {
     fn capture_image(&mut self, img: arboard::ImageData) -> Result<(), String> {
         let hash = db::bytes_hash(&img.bytes);
         if self.last_hash.as_deref() == Some(hash.as_str()) {
+            return Ok(());
+        }
+        if self.consume_self_write(&hash) {
             return Ok(());
         }
         self.last_hash = Some(hash.clone());
@@ -213,6 +248,7 @@ pub fn start(
     app: AppHandle,
     db: Arc<Db>,
     key: Arc<MasterKey>,
+    last_self_write: LastSelfWrite,
     paused: Arc<AtomicBool>,
     max_history: Arc<AtomicI64>,
     dont_save_sensitive: Arc<AtomicBool>,
@@ -238,6 +274,7 @@ pub fn start(
             images_dir,
             clipboard,
             last_hash: None,
+            last_self_write,
         };
         match Master::new(handler) {
             Ok(mut master) => {

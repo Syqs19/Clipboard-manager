@@ -163,20 +163,20 @@ export function ClipCard({
       // viewTransitionName univoco per ogni clip: il browser anima le
       // card che cambiano posizione (riordino drag&drop dei fissati).
       style={{ viewTransitionName: `clip-${clip.id}` }}
-      className={`card-lift group relative rounded-lg border bg-zinc-800/30 ${
+      className={`card-lift group relative rounded-xl border bg-zinc-800/40 ${
         adding ? "z-30" : ""
       } ${
         keyHint !== undefined ? "py-3 pl-8 pr-3" : "p-3"
       } ${
-        editing ? "" : "cursor-pointer hover:bg-zinc-800/60"
+        editing ? "" : "cursor-pointer hover:bg-zinc-800/70"
       } ${
         selectedForBulk
-          ? "scale-[0.98] border-emerald-500/70 bg-emerald-500/5 ring-1 ring-emerald-500/40"
+          ? "glow-emerald scale-[0.98] border-emerald-500/70 bg-emerald-500/5"
           : copied
-            ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
+            ? "glow-emerald border-emerald-500/60"
             : selected
-              ? "border-zinc-600 ring-1 ring-zinc-500/50"
-              : "border-zinc-800 hover:border-zinc-700"
+              ? "border-zinc-600 bg-zinc-800/60 ring-1 ring-zinc-500/40"
+              : "border-zinc-800/60 hover:border-zinc-700/80"
       }`}
     >
       {editing ? (
@@ -255,7 +255,9 @@ export function ClipCard({
         </div>
       ) : (
         <p
-          className={`line-clamp-3 whitespace-pre-wrap break-words text-sm ${
+          // key cambia ad ogni toggle mask/reveal → la fade-in riparte
+          key={masked ? "mask" : "reveal"}
+          className={`anim-fade-in line-clamp-3 whitespace-pre-wrap break-words text-sm ${
             masked ? "font-mono tracking-wide text-zinc-400" : "text-zinc-100"
           }`}
         >
@@ -303,7 +305,7 @@ export function ClipCard({
           {clip.tags.map((t) => (
             <span
               key={t}
-              className="inline-flex items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
+              className="anim-scale-in inline-flex items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
             >
               <input
                 type="color"

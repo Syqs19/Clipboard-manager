@@ -316,7 +316,7 @@ export function Settings({
           ))}
         </div>
 
-        <div className="min-h-[22rem] divide-y divide-zinc-800 px-5">
+        <div key={tab} className="anim-fade-in min-h-[22rem] divide-y divide-zinc-800 px-5">
           {tab === "general" && (
             <>
               <Row

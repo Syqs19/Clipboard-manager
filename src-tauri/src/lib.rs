@@ -10,7 +10,7 @@ mod win_clipboard;
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_store::StoreExt;
@@ -158,8 +158,14 @@ pub fn run() {
             let kinds_for_watcher = runtime.sensitive_kinds.clone();
             let kinds_for_sweep = runtime.sensitive_kinds.clone();
 
+            // segnale "self-write": condiviso fra commands (writer) e watcher
+            // (consumer) per evitare l'auto-bump quando l'app copia una clip.
+            let last_self_write: settings::LastSelfWrite =
+                Arc::new(Mutex::new(None));
+
             app.manage(database.clone());
             app.manage(master_key.clone());
+            app.manage(last_self_write.clone());
             app.manage(runtime);
 
             // backfill di sensitive_kind sulle clip pre-esistenti (idempotente)
@@ -207,6 +213,7 @@ pub fn run() {
                 app.handle().clone(),
                 database.clone(),
                 master_key.clone(),
+                last_self_write,
                 paused,
                 max_hist,
                 dont_save,

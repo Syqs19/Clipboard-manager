@@ -120,6 +120,21 @@ export function ClipList({
   onReveal: (path: string) => void;
   highlightQuery: string;
 }) {
+  // animazione di uscita: tengo gli id in via di eliminazione per ~240ms
+  // così la classe `anim-clip-exit` gira prima del vero unmount.
+  const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
+  const animatedDelete = (id: number) => {
+    setExitingIds((s) => new Set(s).add(id));
+    window.setTimeout(() => {
+      onDelete(id);
+      setExitingIds((s) => {
+        const next = new Set(s);
+        next.delete(id);
+        return next;
+      });
+    }, 240);
+  };
+
   const realPinnedIds = clips.filter((c) => c.pinned).map((c) => c.id);
 
   // Update ottimistico del riordino: al drop applichiamo subito il nuovo
@@ -187,7 +202,7 @@ export function ClipList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={pinnedIds} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {orderedClips.map((clip, i) => {
             const bucket = bucketOf(clip, now);
             const showHeader = bucket !== lastBucket;
@@ -208,7 +223,7 @@ export function ClipList({
                 onCopy={onCopy}
                 onPreview={onPreview}
                 onTogglePin={onTogglePin}
-                onDelete={onDelete}
+                onDelete={animatedDelete}
                 onUpdate={onUpdate}
                 onAddTag={onAddTag}
                 onRemoveTag={onRemoveTag}
@@ -222,10 +237,11 @@ export function ClipList({
               />
             );
 
+            const exiting = exitingIds.has(clip.id);
             return (
               <div
                 key={clip.id}
-                className={`flex flex-col gap-2 ${justArrived ? "anim-slide-in-top" : ""}`}
+                className={`flex flex-col gap-2 ${justArrived ? "anim-slide-in-top" : ""} ${exiting ? "anim-clip-exit" : ""}`}
               >
                 {showHeader && (
                   <div

@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { useExitAnimation } from "../lib/useExitAnimation";
 import {
   ArrowDownAZ,
   ArrowDownWideNarrow,
+  ChevronDown,
   FileText,
   Image,
   Inbox,
@@ -65,9 +67,8 @@ function Item({
 }
 
 /// Voce indentata per filtri secondari (es. "Fissati" dentro una categoria).
-/// Disegna una piccola guida ad L verde che la collega visivamente alla
-/// categoria padre sopra: linea verticale dall'alto fino a metà altezza +
-/// trattino orizzontale verso l'icona.
+/// Disegna una piccola guida ad L verde che si "disegna" all'attivazione
+/// (verticale poi orizzontale) e si "smonta" al contrario all'uscita.
 function SubItem({
   active,
   onClick,
@@ -79,6 +80,8 @@ function SubItem({
   label: string;
   count?: number;
 }) {
+  // 330ms = durata orizzontale (160) + delay verticale (150) + buffer
+  const guide = useExitAnimation(active, 340);
   return (
     <button
       onClick={onClick}
@@ -88,18 +91,22 @@ function SubItem({
           : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300"
       }`}
     >
-      {/* guida ad L verde, visibile SOLO quando la sub-voce è attiva.
-          Stesso spessore della ActiveBar (w-0.5 = 2px), stessa x (-left-1)
-          per fare da continuazione naturale della barra verticale. */}
-      {active && (
+      {/* guida ad L verde: stesso spessore della ActiveBar (w-0.5),
+          stessa x (-left-1). All'entrata si disegna verticale→orizzontale,
+          all'uscita si ritira orizzontale→verticale. */}
+      {guide.mounted && (
         <>
           <span
             aria-hidden
-            className="guide-grow-y pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400"
+            className={`${
+              guide.exiting ? "guide-shrink-y" : "guide-grow-y"
+            } pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400`}
           />
           <span
             aria-hidden
-            className="guide-grow-x pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-emerald-400"
+            className={`${
+              guide.exiting ? "guide-shrink-x" : "guide-grow-x"
+            } pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-emerald-400`}
           />
         </>
       )}
@@ -189,6 +196,59 @@ function ActiveBar({ deps }: { deps: unknown[] }) {
   );
 }
 
+/// Variante di ActiveBar per i tag, ancorata all'`<aside>` (fuori dal
+/// container scrollabile per non essere clippata da `overflow-y-auto`).
+/// Riposiziona anche durante lo scroll della lista tag.
+function TagActiveBar({
+  filter,
+  asideRef,
+  scrollRef,
+}: {
+  filter: Filter;
+  asideRef: React.RefObject<HTMLElement | null>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [pos, setPos] = useState<{ top: number; height: number } | null>(null);
+  const [smooth, setSmooth] = useState(true);
+  const targetName = filter.kind === "tag" ? filter.name : null;
+
+  useLayoutEffect(() => {
+    const measure = (animate: boolean) => {
+      const aside = asideRef.current;
+      const scroll = scrollRef.current;
+      if (!aside || !scroll) return;
+      const active = scroll.querySelector<HTMLElement>('[data-active="true"]');
+      if (!active) {
+        setPos(null);
+        return;
+      }
+      const asideRect = aside.getBoundingClientRect();
+      const r = active.getBoundingClientRect();
+      setSmooth(animate);
+      setPos({ top: r.top - asideRect.top + 6, height: r.height - 12 });
+    };
+    // primo render / cambio filter: anima
+    measure(true);
+    // su scroll, niente animazione (segue 1:1 il pointer)
+    const scroll = scrollRef.current;
+    const onScroll = () => measure(false);
+    scroll?.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroll?.removeEventListener("scroll", onScroll);
+  }, [targetName, asideRef, scrollRef]);
+
+  return (
+    <span
+      aria-hidden
+      // left-2 = 8px dall'aside: le voci tag iniziano a 12px (padding p-3)
+      // quindi resta lo stesso "stacco" di 4px che ha l'ActiveBar del nav.
+      className={`pointer-events-none absolute left-2 w-0.5 rounded-full bg-emerald-400 ${
+        smooth ? "transition-all duration-200 ease-out" : ""
+      } ${pos ? "opacity-100" : "opacity-0"}`}
+      style={pos ? { top: pos.top, height: pos.height } : undefined}
+    />
+  );
+}
+
 function TagRow({
   name,
   count,
@@ -222,6 +282,7 @@ function TagRow({
 
   return (
     <div
+      data-active={active ? "true" : undefined}
       className={`group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
         active
           ? "bg-zinc-700/60 text-zinc-100"
@@ -242,8 +303,11 @@ function TagRow({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            else if (e.key === "Escape") {
+            if (e.key === "Enter") {
+              e.stopPropagation(); // non far copiare la clip in cima
+              commit();
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
               setDraft(name);
               setEditing(false);
             }
@@ -313,6 +377,15 @@ export function Sidebar({
   onRenameTag: (oldName: string, newName: string) => void;
 }) {
   const [sortBy, setSortBy] = useState<"name" | "count">("name");
+  const [clipboardOpen, setClipboardOpen] = useState(true);
+  // durante la transizione collapse del Clipboard wrapper disabilito lo
+  // scroll del container tag per evitare il flash della scrollbar.
+  const [animatingCollapse, setAnimatingCollapse] = useState(false);
+  const toggleClipboard = () => {
+    setAnimatingCollapse(true);
+    setClipboardOpen((o) => !o);
+    window.setTimeout(() => setAnimatingCollapse(false), 220);
+  };
   const compare = (
     a: [string, number, string | null, boolean],
     b: [string, number, string | null, boolean],
@@ -322,6 +395,8 @@ export function Sidebar({
       : a[0].localeCompare(b[0]);
   const pinnedTags = tags.filter(([, , , p]) => p).sort(compare);
   const otherTags = tags.filter(([, , , p]) => !p).sort(compare);
+  const asideRef = useRef<HTMLElement>(null);
+  const tagScrollRef = useRef<HTMLDivElement>(null);
   const renderTag = (
     [name, count, color, pinned]: [string, number, string | null, boolean],
   ) => (
@@ -339,63 +414,123 @@ export function Sidebar({
     />
   );
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col gap-4 border-r border-zinc-800 bg-zinc-900/50 p-3">
-      <div className="px-1 text-sm font-semibold text-zinc-200">Clipboard</div>
+    <aside
+      ref={asideRef}
+      className="relative flex h-full w-60 shrink-0 flex-col border-r border-zinc-800/60 bg-zinc-900/40 p-4 backdrop-blur-md"
+    >
+      {/* Brand header espandibile: logo + wordmark + chevron a destra */}
+      <button
+        type="button"
+        onClick={toggleClipboard}
+        className="group mb-3 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-zinc-800/40"
+      >
+        <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_18px_-4px_rgba(16,185,129,0.45)]">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            {/* clipboard: clip + body */}
+            <rect x="5" y="4" width="14" height="17" rx="2.5" />
+            <rect x="9" y="2.5" width="6" height="3.5" rx="1" fill="currentColor" stroke="none" />
+            <path d="M8.5 11h7M8.5 14h5" />
+          </svg>
+        </span>
+        <span className="flex-1 text-[15px] font-semibold tracking-tight text-zinc-100">
+          Clipboard
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${
+            clipboardOpen ? "" : "-rotate-90"
+          }`}
+        />
+      </button>
 
-      <nav className="relative flex flex-col gap-0.5">
-        <ActiveBar deps={[filter.kind, filter.kind !== "tag" ? filter.pinned : null]} />
-        <CategoryWithPinned
-          mainKind="all"
-          filter={filter}
-          onSelect={onSelect}
-          icon={<Inbox className="h-4 w-4" />}
-          label="Tutto"
-          mainCount={totalCount}
-          pinnedCount={pinnedAllCount}
-        />
-        <CategoryWithPinned
-          mainKind="images"
-          filter={filter}
-          onSelect={onSelect}
-          icon={<Image className="h-4 w-4" />}
-          label="Immagini"
-          mainCount={imageCount}
-          pinnedCount={pinnedImageCount}
-        />
-        <CategoryWithPinned
-          mainKind="files"
-          filter={filter}
-          onSelect={onSelect}
-          icon={<FileText className="h-4 w-4" />}
-          label="File"
-          mainCount={fileCount}
-          pinnedCount={pinnedFileCount}
-        />
-        <CategoryWithPinned
-          mainKind="text"
-          filter={filter}
-          onSelect={onSelect}
-          icon={<Type className="h-4 w-4" />}
-          label="Testo"
-          mainCount={textCount}
-          pinnedCount={pinnedTextCount}
-        />
-      </nav>
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5">
+        <div
+          className={`grid min-h-0 flex-1 transition-all duration-200 ease-out ${
+            clipboardOpen
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          {/* overflow-hidden solo durante l'animazione collapse, altrimenti
+              visible cosi l'ActiveBar a -left-1 del nav non viene clippata */}
+          <div
+            className={`flex min-h-0 flex-col gap-2 ${
+              animatingCollapse || !clipboardOpen
+                ? "overflow-hidden"
+                : "overflow-visible"
+            }`}
+          >
+            <nav className="relative flex flex-col gap-0.5">
+              <ActiveBar
+                deps={[
+                  filter.kind,
+                  filter.kind !== "tag" ? filter.pinned : null,
+                ]}
+              />
+              <CategoryWithPinned
+                mainKind="all"
+                filter={filter}
+                onSelect={onSelect}
+                icon={<Inbox className="h-4 w-4" />}
+                label="Tutto"
+                mainCount={totalCount}
+                pinnedCount={pinnedAllCount}
+              />
+              <CategoryWithPinned
+                mainKind="images"
+                filter={filter}
+                onSelect={onSelect}
+                icon={<Image className="h-4 w-4" />}
+                label="Immagini"
+                mainCount={imageCount}
+                pinnedCount={pinnedImageCount}
+              />
+              <CategoryWithPinned
+                mainKind="files"
+                filter={filter}
+                onSelect={onSelect}
+                icon={<FileText className="h-4 w-4" />}
+                label="File"
+                mainCount={fileCount}
+                pinnedCount={pinnedFileCount}
+              />
+              <CategoryWithPinned
+                mainKind="text"
+                filter={filter}
+                onSelect={onSelect}
+                icon={<Type className="h-4 w-4" />}
+                label="Testo"
+                mainCount={textCount}
+                pinnedCount={pinnedTextCount}
+              />
+            </nav>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-        {pinnedTags.length > 0 && (
-          <div className="flex flex-col gap-0.5">
-            <div className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-zinc-600">
-              Fissati
-            </div>
-            {pinnedTags.map(renderTag)}
-          </div>
-        )}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center justify-between px-2.5 pb-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-              Categorie
-            </span>
+            <div
+              ref={tagScrollRef}
+              className={`flex min-h-0 flex-1 flex-col gap-2 ${
+                animatingCollapse ? "overflow-hidden" : "overflow-y-auto"
+              }`}
+            >
+              {pinnedTags.length > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  <div className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-zinc-600">
+                    Fissati
+                  </div>
+                  {pinnedTags.map(renderTag)}
+                </div>
+              )}
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between px-2.5 pb-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-600">
+                    Tags
+                  </span>
             <button
               onClick={() =>
                 setSortBy((s) => (s === "name" ? "count" : "name"))
@@ -414,12 +549,20 @@ export function Sidebar({
               )}
             </button>
           </div>
-          {otherTags.length === 0 && tags.length === 0 && (
-            <div className="px-2.5 py-1 text-xs text-zinc-600">nessuna</div>
-          )}
-          {otherTags.map(renderTag)}
+                {otherTags.length === 0 && tags.length === 0 && (
+                  <div className="px-2.5 py-1 text-xs text-zinc-600">
+                    nessuna
+                  </div>
+                )}
+                {otherTags.map(renderTag)}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+      {/* ActiveBar dei tag fuori dal container scrollabile (evita il
+          clipping di overflow-y-auto), ancorata all'aside */}
+      <TagActiveBar filter={filter} asideRef={asideRef} scrollRef={tagScrollRef} />
     </aside>
   );
 }
