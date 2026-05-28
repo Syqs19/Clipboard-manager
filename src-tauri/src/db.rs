@@ -15,17 +15,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS clips (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    content      TEXT,                       -- NULL per le immagini pure
-    content_type TEXT NOT NULL,              -- 'text' | 'image' | 'url'
-    image_path   TEXT,
-    preview      TEXT NOT NULL,
-    created_at   INTEGER NOT NULL,           -- unix millis
-    pinned       INTEGER NOT NULL DEFAULT 0,
-    pinned_order INTEGER,
-    char_count   INTEGER NOT NULL DEFAULT 0,
-    sensitive    INTEGER NOT NULL DEFAULT 0,  -- 1 = mascherare nella UI (IBAN/carte/email/token)
-    hash         TEXT NOT NULL UNIQUE
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    content        TEXT,                       -- NULL per le immagini pure
+    content_type   TEXT NOT NULL,              -- 'text' | 'image' | 'url'
+    image_path     TEXT,
+    preview        TEXT NOT NULL,
+    created_at     INTEGER NOT NULL,           -- unix millis
+    pinned         INTEGER NOT NULL DEFAULT 0,
+    pinned_order   INTEGER,
+    char_count     INTEGER NOT NULL DEFAULT 0,
+    sensitive      INTEGER NOT NULL DEFAULT 0,  -- 1 = mascherare nella UI (IBAN/carte/email/token)
+    sensitive_kind TEXT,                       -- 'email' | 'iban' | 'card' | 'token' (NULL se non sensibile)
+    hash           TEXT NOT NULL UNIQUE
 );
 CREATE TABLE IF NOT EXISTS tags (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,6 +92,7 @@ pub struct NewClip {
     pub created_at: i64,
     pub char_count: i64,
     pub sensitive: bool,
+    pub sensitive_kind: Option<String>,
     pub hash: String,
 }
 
@@ -114,6 +116,8 @@ impl Db {
     fn init(conn: Connection) -> rusqlite::Result<Self> {
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
         conn.execute_batch(SCHEMA)?;
+        // migrazione additiva per DB pre-esistenti (colonna aggiunta dopo il rilascio)
+        let _ = conn.execute("ALTER TABLE clips ADD COLUMN sensitive_kind TEXT", []);
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -132,8 +136,8 @@ impl Db {
             return Ok(id);
         }
         conn.execute(
-            "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, sensitive, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, sensitive, sensitive_kind, hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 new.content,
                 new.content_type,
@@ -142,6 +146,7 @@ impl Db {
                 new.created_at,
                 new.char_count,
                 new.sensitive as i64,
+                new.sensitive_kind,
                 new.hash
             ],
         )?;
@@ -232,6 +237,67 @@ impl Db {
         Ok(())
     }
 
+    /// Cancella la clip non-pinnata con questo hash, se esiste. Ritorna quante (0 o 1).
+    pub fn delete_by_hash_if_unpinned(&self, hash: &str) -> rusqlite::Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "DELETE FROM clips WHERE hash = ?1 AND pinned = 0",
+            params![hash],
+        )?;
+        Ok(n)
+    }
+
+    /// Cancella le clip non-pinnate più vecchie di `cutoff_ms` il cui `sensitive_kind`
+    /// è in `kinds`. Se `kinds` è vuoto non fa nulla. Ritorna quante ne ha rimosse.
+    pub fn delete_expired_sensitive_kinds(
+        &self,
+        cutoff_ms: i64,
+        kinds: &[&str],
+    ) -> rusqlite::Result<usize> {
+        if kinds.is_empty() {
+            return Ok(0);
+        }
+        let placeholders = std::iter::repeat("?").take(kinds.len()).collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "DELETE FROM clips
+             WHERE pinned = 0 AND created_at < ?1 AND sensitive_kind IN ({placeholders})"
+        );
+        let conn = self.conn.lock().unwrap();
+        let mut p: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(kinds.len() + 1);
+        p.push(&cutoff_ms);
+        for k in kinds {
+            p.push(k);
+        }
+        let n = conn.execute(&sql, rusqlite::params_from_iter(p.iter().copied()))?;
+        Ok(n)
+    }
+
+    /// Riempi `sensitive_kind` per le clip pre-esistenti dove è NULL ma `sensitive=1`,
+    /// ricategorizzando il contenuto. Chiamata una volta sola all'avvio.
+    pub fn backfill_sensitive_kinds(&self) -> rusqlite::Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, content FROM clips
+             WHERE sensitive = 1 AND sensitive_kind IS NULL AND content IS NOT NULL",
+        )?;
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<Result<_, _>>()?;
+        drop(stmt);
+        let mut n = 0;
+        for (id, content) in rows {
+            let cat = crate::categorizer::categorize(&content);
+            if let Some(kind) = cat.sensitive_kind {
+                conn.execute(
+                    "UPDATE clips SET sensitive_kind = ?1 WHERE id = ?2",
+                    params![kind, id],
+                )?;
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+
     // ----- tag -----
 
     pub fn get_or_create_tag(
@@ -314,17 +380,18 @@ impl Db {
         preview: &str,
         char_count: i64,
         sensitive: bool,
+        sensitive_kind: Option<&str>,
         hash: &str,
     ) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         let with_hash = conn.execute(
-            "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6, hash=?7 WHERE id=?1",
-            params![id, content, content_type, preview, char_count, sensitive as i64, hash],
+            "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7, hash=?8 WHERE id=?1",
+            params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind, hash],
         );
         if with_hash.is_err() {
             conn.execute(
-                "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6 WHERE id=?1",
-                params![id, content, content_type, preview, char_count, sensitive as i64],
+                "UPDATE clips SET content=?2, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7 WHERE id=?1",
+                params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind],
             )?;
         }
         Ok(())
@@ -385,6 +452,7 @@ mod tests {
             created_at: ts,
             char_count: content.chars().count() as i64,
             sensitive: false,
+            sensitive_kind: None,
             hash: content_hash(content),
         }
     }
@@ -429,7 +497,7 @@ mod tests {
         let tag = db.get_or_create_tag("Codice", Some("#888"), true).unwrap();
         db.attach_tag(keep, tag).unwrap();
         let counts = db.list_tags_with_counts().unwrap();
-        assert_eq!(counts, vec![("Codice".to_string(), 1)]);
+        assert_eq!(counts, vec![("Codice".to_string(), 1, Some("#888".to_string()))]);
     }
 
     #[test]

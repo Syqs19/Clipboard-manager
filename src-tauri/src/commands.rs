@@ -103,6 +103,7 @@ pub fn update_clip(db: State<Database>, id: i64, content: String) -> Result<(), 
         &preview,
         content.chars().count() as i64,
         cat.sensitive,
+        cat.sensitive_kind,
         &crate::db::content_hash(&content),
     )
     .map_err(|e| e.to_string())
@@ -153,4 +154,28 @@ pub fn apply_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     gs.register(shortcut.as_str()).map_err(|e| e.to_string())
+}
+
+/// Se true, le clip rilevate come sensibili non vengono salvate affatto.
+#[tauri::command]
+pub fn apply_dont_save_sensitive(state: State<RuntimeState>, value: bool) {
+    state.dont_save_sensitive.store(value, Ordering::Relaxed);
+}
+
+/// TTL in minuti per le clip sensibili (0 = disabilitato).
+#[tauri::command]
+pub fn apply_sensitive_ttl(state: State<RuntimeState>, minutes: i64) {
+    state.sensitive_ttl_minutes.store(minutes.max(0), Ordering::Relaxed);
+}
+
+/// Sostituisce il set di categorie sensibili attive (subset di "email"/"iban"/"card"/"token").
+#[tauri::command]
+pub fn apply_sensitive_kinds(state: State<RuntimeState>, kinds: Vec<String>) {
+    let valid: std::collections::HashSet<String> = kinds
+        .into_iter()
+        .filter(|k| crate::settings::ALL_SENSITIVE_KINDS.contains(&k.as_str()))
+        .collect();
+    if let Ok(mut s) = state.sensitive_kinds.write() {
+        *s = valid;
+    }
 }

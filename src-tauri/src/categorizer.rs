@@ -23,6 +23,12 @@ static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
 static IBAN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$").unwrap());
 
+/// Valori canonici del campo `sensitive_kind`. Stabili: usati nel DB e nello store.
+pub const SK_EMAIL: &str = "email";
+pub const SK_IBAN: &str = "iban";
+pub const SK_CARD: &str = "card";
+pub const SK_TOKEN: &str = "token";
+
 /// Risultato della categorizzazione.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Category {
@@ -32,6 +38,8 @@ pub struct Category {
     pub tag: &'static str,
     /// Se true, la UI maschera il contenuto (ma resta copiabile/rivelabile).
     pub sensitive: bool,
+    /// Sottotipo del sensibile ("email" | "iban" | "card" | "token"), se `sensitive`.
+    pub sensitive_kind: Option<&'static str>,
 }
 
 /// Classifica un contenuto testuale.
@@ -41,8 +49,13 @@ pub fn categorize(content: &str) -> Category {
     let trimmed = content.trim_start_matches('\u{feff}').trim();
     let (content_type, tag) = classify(trimmed, content);
     // gli URL non si mascherano; per il resto applica le regole sui dati sensibili
-    let sensitive = content_type != "url" && is_sensitive(trimmed);
-    Category { content_type, tag, sensitive }
+    let sensitive_kind = if content_type != "url" { detect_sensitive_kind(trimmed) } else { None };
+    Category {
+        content_type,
+        tag,
+        sensitive: sensitive_kind.is_some(),
+        sensitive_kind,
+    }
 }
 
 /// Determina (content_type, tag). Ordine dal più specifico al generico, così un
@@ -66,19 +79,22 @@ fn classify(trimmed: &str, original: &str) -> (&'static str, &'static str) {
     ("text", "Testo")
 }
 
-/// Decide se il contenuto va mascherato: email, IBAN, carta, o token/chiave lunga.
-fn is_sensitive(trimmed: &str) -> bool {
+/// Restituisce il sottotipo del sensibile, se presente.
+fn detect_sensitive_kind(trimmed: &str) -> Option<&'static str> {
     if EMAIL_RE.is_match(trimmed) {
-        return true;
+        return Some(SK_EMAIL);
     }
     let compact: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
     if IBAN_RE.is_match(&compact) {
-        return true;
+        return Some(SK_IBAN);
     }
     if is_card_number(&compact) {
-        return true;
+        return Some(SK_CARD);
     }
-    is_long_token(trimmed)
+    if is_long_token(trimmed) {
+        return Some(SK_TOKEN);
+    }
+    None
 }
 
 /// Numeri puri, IBAN o carte: usato per il tag "Numeri" (non implica sensibile).

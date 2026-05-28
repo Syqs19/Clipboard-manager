@@ -8,16 +8,21 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
   sincronizzata col mouse), `Invio` e `1-9` per copiare la clip selezionata, con animazione
   "Copiato" (anche quando una clip risale in cima). L'incolla automatico (Ctrl+V simulato +
   chiusura finestra) è stato **scartato per scelta UX**: l'Invio ora **copia e basta**.
-- ☐ **Salta i password manager** — rispettare i formati clipboard "escludi da cronologia"
-  (`ExcludeClipboardContentFromMonitorProcessing`) così le password copiate non vengono
-  salvate. Era nel piano originale; tocca la priorità privacy.
+- ✅ **Salta i password manager** — il watcher rispetta i formati clipboard
+  `ExcludeClipboardContentFromMonitorProcessing` e `CanIncludeInClipboardHistory`:
+  se presenti, la cattura viene saltata in silenzio (sempre-on, niente UI).
 - ✅ **Icona personalizzata** — icona clipboard verde generata, sostituita a quella di Tauri.
 
 ## 🔒 Hardening privacy
 
 - ☐ **Cifratura a riposo** dei clip sensibili (o intero DB con SQLCipher) — ora in chiaro nel file SQLite.
-- ☐ **Auto-cancellazione** dei clip sensibili dopo X minuti, o opzione "non salvarli affatto".
-- ☐ **Hotkey panico** per svuotare tutta la cronologia all'istante.
+- ✅ **Auto-cancellazione** dei clip sensibili: toggle "Non salvarli mai" + TTL in minuti
+  (sweep ogni 60s, non tocca le clip fissate). Inoltre, se il toggle è on e si ricopia
+  un sensibile già in cronologia, viene rimosso anche quello.
+- ✅ **Granularità categorie sensibili** — multi-checkbox (email/IBAN/carte/token) per
+  decidere quali tipi sono soggetti a non-salvataggio e TTL. La mascheratura nella UI
+  resta sempre attiva su tutti i sensibili rilevati, indipendentemente dalla scelta.
+- ☐ ~~Hotkey panico~~ — scartata per UX (rischio pressioni accidentali).
 
 ## ✨ Completare lo spec / feature
 
@@ -50,8 +55,12 @@ Idee di miglioramento per l'app, in ordine di impatto. Stato: ☐ da fare · ⏳
 - ✅ Modifica del contenuto dei clip
 - ✅ Colori dei tag (picker nativo da sidebar e dai chip)
 - ✅ Navigazione da tastiera (Invio/1-9 = copia) + feedback "Copiato"
+- ✅ Salta i password manager (rispetto dei formati di esclusione)
+- ✅ Auto-cancellazione clip sensibili (toggle + TTL + rimozione su ricopia)
+- ✅ Granularità categorie sensibili (multi-checkbox email/IBAN/carte/token)
+- ✅ Impostazioni divise in tab (Generali / Sicurezza / Reset), altezza stabile
 
 ### Prossimi candidati (non ancora fatti)
-- Salta i password manager (privacy)
 - Riordino drag & drop dei fissati
+- Raggruppa per data in cronologia
 - README + onboarding al primo avvio

@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { X, Trash2, Keyboard } from "lucide-react";
 import { Store } from "@tauri-apps/plugin-store";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { api } from "../lib/api";
+import { api, SENSITIVE_KINDS, type SensitiveKind } from "../lib/api";
+
+const KIND_LABELS: Record<SensitiveKind, string> = {
+  email: "Email",
+  iban: "IBAN",
+  card: "Carte di credito",
+  token: "Token / chiavi API",
+};
 
 function Toggle({
   checked,
@@ -80,6 +87,12 @@ export function Settings({
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+  const [dontSaveSensitive, setDontSaveSensitive] = useState(false);
+  const [sensitiveTtl, setSensitiveTtl] = useState(0);
+  const [sensitiveKinds, setSensitiveKinds] = useState<SensitiveKind[]>([
+    ...SENSITIVE_KINDS,
+  ]);
+  const [tab, setTab] = useState<"general" | "security" | "reset">("general");
 
   // carica le impostazioni quando si apre
   useEffect(() => {
@@ -90,6 +103,16 @@ export function Settings({
       setCloseToTray((await store.get<boolean>("closeToTray")) ?? true);
       setMaxHistory((await store.get<number>("maxHistory")) ?? 200);
       setHotkey((await store.get<string>("hotkey")) ?? "Ctrl+Shift+V");
+      setDontSaveSensitive((await store.get<boolean>("dontSaveSensitive")) ?? false);
+      setSensitiveTtl((await store.get<number>("sensitiveTtlMinutes")) ?? 0);
+      const storedKinds = (await store.get<string[]>("sensitiveKinds")) ?? [
+        ...SENSITIVE_KINDS,
+      ];
+      setSensitiveKinds(
+        storedKinds.filter((k): k is SensitiveKind =>
+          (SENSITIVE_KINDS as readonly string[]).includes(k),
+        ),
+      );
       setAutostart(await isEnabled());
       setConfirmClear(false);
       setHotkeyError("");
@@ -153,6 +176,25 @@ export function Settings({
     setConfirmClear(false);
     onReload();
   };
+  const onDontSaveSensitive = async (v: boolean) => {
+    setDontSaveSensitive(v);
+    await save("dontSaveSensitive", v);
+    await api.applyDontSaveSensitive(v);
+  };
+  const onSensitiveTtl = async (v: number) => {
+    if (!Number.isFinite(v) || v < 0) return;
+    setSensitiveTtl(v);
+    await save("sensitiveTtlMinutes", v);
+    await api.applySensitiveTtl(v);
+  };
+  const onToggleKind = async (kind: SensitiveKind, checked: boolean) => {
+    const next = checked
+      ? Array.from(new Set([...sensitiveKinds, kind]))
+      : sensitiveKinds.filter((k) => k !== kind);
+    setSensitiveKinds(next);
+    await save("sensitiveKinds", next);
+    await api.applySensitiveKinds(next);
+  };
 
   return (
     <div
@@ -173,65 +215,151 @@ export function Settings({
           </button>
         </div>
 
-        <div className="divide-y divide-zinc-800 px-5">
-          <Row
-            title="Avvia all'avvio del sistema"
-            hint="Apri automaticamente all'accensione del PC"
-          >
-            <Toggle checked={autostart} onChange={onAutostart} />
-          </Row>
-
-          <Row
-            title="Avvia nascosto nel tray"
-            hint="All'avvio non mostrare la finestra"
-          >
-            <Toggle checked={startHidden} onChange={onStartHidden} />
-          </Row>
-
-          <Row
-            title="Chiudi nel tray"
-            hint="La X nasconde invece di uscire dall'app"
-          >
-            <Toggle checked={closeToTray} onChange={onCloseToTray} />
-          </Row>
-
-          <Row
-            title="Max clip in cronologia"
-            hint="Le clip non fissate oltre questo numero vengono rimosse"
-          >
-            <input
-              type="number"
-              min={1}
-              value={maxHistory}
-              onChange={(e) => onMaxHistory(parseInt(e.target.value, 10))}
-              className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-100 outline-none focus:border-zinc-600"
-            />
-          </Row>
-
-          <Row title="Scorciatoia globale" hint="Apre/nasconde la finestra">
+        <div className="flex gap-1 border-b border-zinc-800 px-3 pt-2">
+          {(
+            [
+              ["general", "Generali"],
+              ["security", "Sicurezza"],
+              ["reset", "Reset"],
+            ] as const
+          ).map(([id, label]) => (
             <button
-              onClick={() => {
-                setHotkeyError("");
-                setRecording(true);
-              }}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors ${
-                recording
-                  ? "border-emerald-500 text-emerald-400"
-                  : "border-zinc-700 text-zinc-200 hover:border-zinc-600"
+              key={id}
+              onClick={() => setTab(id)}
+              className={`relative rounded-t-md px-3 py-2 text-sm transition-colors ${
+                tab === id
+                  ? "text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              <Keyboard className="h-3.5 w-3.5" />
-              {recording ? "Premi i tasti…" : hotkey}
+              {label}
+              {tab === id && (
+                <span className="absolute inset-x-2 -bottom-px h-0.5 bg-emerald-500" />
+              )}
             </button>
-          </Row>
-          {hotkeyError && (
-            <div className="py-2 text-xs text-red-400">{hotkeyError}</div>
+          ))}
+        </div>
+
+        <div className="min-h-[22rem] divide-y divide-zinc-800 px-5">
+          {tab === "general" && (
+            <>
+              <Row
+                title="Avvia all'avvio del sistema"
+                hint="Apri automaticamente all'accensione del PC"
+              >
+                <Toggle checked={autostart} onChange={onAutostart} />
+              </Row>
+
+              <Row
+                title="Avvia nascosto nel tray"
+                hint="All'avvio non mostrare la finestra"
+              >
+                <Toggle checked={startHidden} onChange={onStartHidden} />
+              </Row>
+
+              <Row
+                title="Chiudi nel tray"
+                hint="La X nasconde invece di uscire dall'app"
+              >
+                <Toggle checked={closeToTray} onChange={onCloseToTray} />
+              </Row>
+
+              <Row
+                title="Max clip in cronologia"
+                hint="Le clip non fissate oltre questo numero vengono rimosse"
+              >
+                <input
+                  type="number"
+                  min={1}
+                  value={maxHistory}
+                  onChange={(e) => onMaxHistory(parseInt(e.target.value, 10))}
+                  className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                />
+              </Row>
+
+              <Row title="Scorciatoia globale" hint="Apre/nasconde la finestra">
+                <button
+                  onClick={() => {
+                    setHotkeyError("");
+                    setRecording(true);
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors ${
+                    recording
+                      ? "border-emerald-500 text-emerald-400"
+                      : "border-zinc-700 text-zinc-200 hover:border-zinc-600"
+                  }`}
+                >
+                  <Keyboard className="h-3.5 w-3.5" />
+                  {recording ? "Premi i tasti…" : hotkey}
+                </button>
+              </Row>
+              {hotkeyError && (
+                <div className="py-2 text-xs text-red-400">{hotkeyError}</div>
+              )}
+            </>
           )}
 
-          <Row
-            title="Pulisci cronologia"
-            hint="Svuota la cronologia ma mantiene le clip fissate"
-          >
+          {tab === "security" && (
+            <>
+              <Row
+                title="Non salvare clip sensibili"
+                hint="IBAN, carte, email, token: non vengono mai aggiunti alla cronologia"
+              >
+                <Toggle
+                  checked={dontSaveSensitive}
+                  onChange={onDontSaveSensitive}
+                />
+              </Row>
+
+              <Row
+                title="Cancella sensibili dopo (minuti)"
+                hint="0 = mai. Le clip sensibili non fissate scadute vengono rimosse"
+              >
+                <input
+                  type="number"
+                  min={0}
+                  value={sensitiveTtl}
+                  onChange={(e) =>
+                    onSensitiveTtl(parseInt(e.target.value, 10))
+                  }
+                  className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                />
+              </Row>
+
+              <div className="py-3">
+                <div className="text-sm text-zinc-100">
+                  Categorie sensibili per la cancellazione
+                </div>
+                <div className="text-xs text-zinc-500">
+                  Solo le categorie selezionate vengono saltate o cancellate. La
+                  mascheratura nella UI resta sempre attiva per tutti i
+                  sensibili.
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {SENSITIVE_KINDS.map((k) => (
+                    <label
+                      key={k}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={sensitiveKinds.includes(k)}
+                        onChange={(e) => onToggleKind(k, e.target.checked)}
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                      {KIND_LABELS[k]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === "reset" && (
+            <Row
+              title="Pulisci cronologia"
+              hint="Svuota la cronologia ma mantiene le clip fissate"
+            >
             {confirmClear ? (
               <div className="flex gap-2">
                 <button
@@ -255,7 +383,8 @@ export function Settings({
                 <Trash2 className="h-3.5 w-3.5" /> Pulisci
               </button>
             )}
-          </Row>
+            </Row>
+          )}
         </div>
       </div>
     </div>

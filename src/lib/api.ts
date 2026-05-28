@@ -37,7 +37,16 @@ export const api = {
   applyCloseToTray: (value: boolean) =>
     invoke<void>("apply_close_to_tray", { value }),
   applyHotkey: (shortcut: string) => invoke<void>("apply_hotkey", { shortcut }),
+  applyDontSaveSensitive: (value: boolean) =>
+    invoke<void>("apply_dont_save_sensitive", { value }),
+  applySensitiveTtl: (minutes: number) =>
+    invoke<void>("apply_sensitive_ttl", { minutes }),
+  applySensitiveKinds: (kinds: string[]) =>
+    invoke<void>("apply_sensitive_kinds", { kinds }),
 };
+
+export const SENSITIVE_KINDS = ["email", "iban", "card", "token"] as const;
+export type SensitiveKind = (typeof SENSITIVE_KINDS)[number];
 
 /// Evento emesso dal menu tray "Impostazioni".
 export function onOpenSettings(cb: () => void): Promise<UnlistenFn> {
