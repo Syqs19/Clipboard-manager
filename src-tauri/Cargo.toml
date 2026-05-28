@@ -4,6 +4,7 @@ version = "0.2.0"
 description = "Local clipboard manager"
 authors = ["Syqs19"]
 edition = "2021"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

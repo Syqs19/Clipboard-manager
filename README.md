@@ -103,4 +103,6 @@ See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the detailed status. Pending:
 
 ## License
 
-Personal, not yet publicly released.
+Copyright © 2026 Syqs19. **All rights reserved.** Proprietary — no permission
+is granted to use, copy, modify, or distribute this software or its source
+code without prior written permission. See [LICENSE](LICENSE).

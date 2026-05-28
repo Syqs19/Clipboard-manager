@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { X, Trash2, Keyboard, Download, Upload } from "lucide-react";
+import { X, Trash2, Keyboard, Download, Upload, ExternalLink } from "lucide-react";
 import { useExitAnimation } from "../lib/useExitAnimation";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Store } from "@tauri-apps/plugin-store";
 import {
   open as openDialog,
@@ -23,6 +25,8 @@ function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+const REPO_URL = "https://github.com/Syqs19/Clipboard-manager";
 
 const MODIFIER_LABELS: Record<SelectModifier, string> = {
   ctrl: "Ctrl",
@@ -126,10 +130,11 @@ export function Settings({
     ...SENSITIVE_KINDS,
   ]);
   const [selectMod, setSelectMod] = useState<SelectModifier>("ctrl");
-  const [tab, setTab] = useState<"general" | "security" | "stats" | "reset">(
-    "general",
-  );
+  const [tab, setTab] = useState<
+    "general" | "security" | "stats" | "about" | "reset"
+  >("general");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [version, setVersion] = useState("");
 
   // carica le impostazioni quando si apre
   useEffect(() => {
@@ -157,6 +162,7 @@ export function Settings({
       setAutostart(await isEnabled());
       setConfirmClear(false);
       setHotkeyError("");
+      setVersion(await getVersion());
     })();
   }, [open]);
 
@@ -321,6 +327,7 @@ export function Settings({
               ["general", "General"],
               ["security", "Security"],
               ["stats", "Stats"],
+              ["about", "About"],
               ["reset", "Reset"],
             ] as const
           ).map(([id, label]) => (
@@ -523,6 +530,36 @@ export function Settings({
                   Loading…
                 </div>
               )}
+            </>
+          )}
+
+          {tab === "about" && (
+            <>
+              <div className="flex flex-col items-center gap-1 py-6 text-center">
+                <div className="text-base font-semibold text-zinc-100">
+                  Clipboard Manager
+                </div>
+                <div className="text-sm font-medium tabular-nums text-emerald-400">
+                  {version ? `v${version}` : "—"}
+                </div>
+                <div className="mt-1 max-w-xs text-xs text-zinc-500">
+                  Local clipboard manager — private by design. No cloud, no
+                  telemetry, no accounts.
+                </div>
+              </div>
+
+              <Row title="Repository" hint="Source code & releases on GitHub">
+                <button
+                  onClick={() => openUrl(REPO_URL)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> GitHub
+                </button>
+              </Row>
+
+              <Row title="License" hint="Proprietary — © 2026 Syqs19">
+                <span className="text-sm text-zinc-300">All rights reserved</span>
+              </Row>
             </>
           )}
 

@@ -89,11 +89,12 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 
 ### Done (2026-05-29)
 - ✅ Renamed app identifier `com.matte.clipboardmanager` → `com.clipboardmanager.app` (neutral, no personal name) + bump to v0.2.0
-- ✅ Stats panel (Settings tab): total clips, pinned, images, sensitive, tags + disk usage (encrypted DB + images). New `get_stats` command, `Db::stats()` with test (48 tests total)
+- ✅ Stats panel (Settings tab): total clips, pinned, images, sensitive, tags + disk usage (encrypted DB + images). New `get_stats` command, `Db::stats()` with test
+- ✅ More sensitive categories: Codice Fiscale (IT), US SSN, private/SSH keys, JWT, crypto addresses, mask-only strings — beyond email/IBAN/card/token (54 backend tests total)
+- ✅ Settings → About panel: app version (runtime `getVersion`), GitHub repo link (opener), license
 
 ### Next candidates (not yet done)
 - Code signing (paid certificate → removes SmartScreen warning on install)
 - Optional passphrase as an alternative to DPAPI-only (opt-in, prompts at launch)
 - Drag-out of a clip from the card to an external app (real clipboard-manager feel)
-- Settings → About panel (version, repo link, license)
 - Real screenshots in README
