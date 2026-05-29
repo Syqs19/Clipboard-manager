@@ -16,10 +16,12 @@ import {
   Plus,
   Trash2,
   Type,
+  Wand2,
   X,
 } from "lucide-react";
 import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
+import { TransformPicker } from "./TransformPicker";
 import { maskSensitive, relativeTime, splitMatches } from "../lib/format";
 import { useImageUrl } from "../lib/useImageUrl";
 
@@ -70,6 +72,8 @@ export function ClipCard({
   onReveal,
   onCopyImageAsFile,
   onQuickOpen,
+  onTransform,
+  onPopoverOpenChange,
   selectModifier,
   selectionMode,
   allTags,
@@ -94,6 +98,8 @@ export function ClipCard({
   onReveal?: (path: string) => void;
   onCopyImageAsFile?: (id: number) => void;
   onQuickOpen?: (clip: Clip) => void;
+  onTransform?: (id: number, transform: string) => void;
+  onPopoverOpenChange?: (open: boolean) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
   allTags: [string, number, string | null, boolean][];
@@ -101,6 +107,7 @@ export function ClipCard({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [transforming, setTransforming] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -108,6 +115,13 @@ export function ClipCard({
   useEffect(() => {
     if (selected) rootRef.current?.scrollIntoView({ block: "nearest" });
   }, [selected]);
+
+  // segnala al parent quando il popover "Copy as…" è aperto, così la
+  // navigazione ↑↓ della lista viene sospesa finché il menu è visibile
+  useEffect(() => {
+    onPopoverOpenChange?.(transforming);
+    return () => onPopoverOpenChange?.(false);
+  }, [transforming]);
 
   const masked = clip.sensitive && !revealed;
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
@@ -176,13 +190,15 @@ export function ClipCard({
     <div
       ref={rootRef}
       onClick={handleCardClick}
+      // il popover "Copy as…" vive nelle hover-actions: se il mouse lascia la
+      // card va chiuso davvero, altrimenti resterebbe montato (invisibile) e
+      // riapparirebbe al successivo hover
+      onMouseLeave={() => transforming && setTransforming(false)}
       // viewTransitionName univoco per ogni clip: il browser anima le
       // card che cambiano posizione (riordino drag&drop dei fissati).
       style={{ viewTransitionName: `clip-${clip.id}` }}
-      className={`card-lift group relative rounded-xl border bg-zinc-800/40 ${
-        adding ? "z-30" : ""
-      } ${
-        keyHint !== undefined ? "py-3 pl-8 pr-3" : "p-3"
+      className={`card-lift group relative rounded-xl border bg-zinc-800/40 p-3 ${
+        adding || transforming ? "z-30" : ""
       } ${
         editing ? "" : "cursor-pointer hover:bg-zinc-800/70"
       } ${
@@ -195,6 +211,108 @@ export function ClipCard({
               : "border-zinc-800/60 hover:border-zinc-700/80"
       }`}
     >
+      {/* barra in testa: badge tastiera a sinistra, azioni a destra (in hover).
+          In flusso normale (non overlay) così il contenuto non viene mai coperto. */}
+      {!editing && !selectionMode && (
+        <div className="mb-1.5 flex h-7 items-center gap-2">
+          {keyHint !== undefined ? (
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-700 bg-zinc-900/80 text-[10px] font-semibold text-zinc-400">
+              {keyHint}
+            </div>
+          ) : (
+            <span className="w-0" />
+          )}
+          <div className="ml-auto flex items-center gap-0.5 rounded-lg bg-zinc-900/60 p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {quick && onQuickOpen && (
+              <IconButton title={quick.title} onClick={() => onQuickOpen(clip)}>
+                {quick.icon}
+              </IconButton>
+            )}
+            {clip.sensitive && (
+              <IconButton
+                title={revealed ? "Hide" : "Reveal"}
+                onClick={() => setRevealed((r) => !r)}
+              >
+                {revealed ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </IconButton>
+            )}
+            {!isImage && !isFiles && (
+              <IconButton title="Edit" onClick={startEdit}>
+                <Pencil className="h-4 w-4" />
+              </IconButton>
+            )}
+            {/* "Apri posizione" disponibile solo per i file copiati dall'Explorer:
+                i PNG delle immagini sono cifrati su disco, mostrarli in Esplora
+                non avrebbe senso */}
+            {isFiles && onReveal && filePaths[0] && (
+              <IconButton
+                title="Open location"
+                onClick={() => onReveal(filePaths[0])}
+              >
+                <FolderOpen className="h-4 w-4" />
+              </IconButton>
+            )}
+            {isImage && onCopyImageAsFile && (
+              <IconButton
+                title="Copy as file (paste into a folder with Ctrl+V)"
+                onClick={() => onCopyImageAsFile(clip.id)}
+              >
+                <FileDown className="h-4 w-4" />
+              </IconButton>
+            )}
+            {onTransform && !isFiles && (
+              <div className="relative">
+                <IconButton
+                  title="Copy as…"
+                  onClick={() => setTransforming((v) => !v)}
+                >
+                  <Wand2 className="h-4 w-4" />
+                </IconButton>
+                {transforming && (
+                  <TransformPicker
+                    isImage={isImage}
+                    content={clip.content}
+                    onPick={(t) => onTransform(clip.id, t)}
+                    onClose={() => setTransforming(false)}
+                  />
+                )}
+              </div>
+            )}
+            <IconButton
+              title={hasRich ? "Copy with formatting" : "Copy"}
+              onClick={() => onCopy(clip.id)}
+            >
+              <Copy className="h-4 w-4" />
+            </IconButton>
+            {hasRich && (
+              <IconButton
+                title="Copy as plain text"
+                onClick={() => onCopy(clip.id, true)}
+              >
+                <Type className="h-4 w-4" />
+              </IconButton>
+            )}
+            <IconButton
+              title={clip.pinned ? "Unpin" : "Pin"}
+              onClick={() => onTogglePin(clip)}
+            >
+              <Pin
+                className={`h-4 w-4 ${
+                  clip.pinned ? "fill-amber-400 text-amber-400" : ""
+                }`}
+              />
+            </IconButton>
+            <IconButton title="Delete" danger onClick={() => onDelete(clip.id)}>
+              <Trash2 className="h-4 w-4" />
+            </IconButton>
+          </div>
+        </div>
+      )}
+
       {editing ? (
         <div onClick={(e) => e.stopPropagation()} className="flex flex-col gap-2">
           <textarea
@@ -321,7 +439,7 @@ export function ClipCard({
           {clip.tags.map((t) => (
             <span
               key={t}
-              className="anim-scale-in inline-flex items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
+              className="anim-scale-in inline-flex max-w-[12rem] items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
             >
               <input
                 type="color"
@@ -331,14 +449,16 @@ export function ClipCard({
                 title="Tag color"
                 className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full"
               />
-              {t}
+              <span className="truncate" title={t}>
+                {t}
+              </span>
               <button
                 title="Remove tag"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemoveTag(clip.id, t);
                 }}
-                className="text-zinc-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                className="shrink-0 text-zinc-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -373,13 +493,6 @@ export function ClipCard({
         </div>
       )}
 
-      {/* badge tastiera 1-9 */}
-      {keyHint !== undefined && !editing && (
-        <div className="absolute left-2 top-2 flex h-4 w-4 items-center justify-center rounded border border-zinc-700 bg-zinc-900/80 text-[10px] font-semibold text-zinc-400">
-          {keyHint}
-        </div>
-      )}
-
       {/* checkbox in modalità selezione: piccolo bounce al toggle */}
       {selectionMode && !editing && (
         <div className="absolute right-2 top-2 text-emerald-400">
@@ -391,80 +504,6 @@ export function ClipCard({
           ) : (
             <Circle key="unchecked" className="h-5 w-5 text-zinc-500" />
           )}
-        </div>
-      )}
-
-      {/* azioni in hover (nascoste durante la modalità selezione) */}
-      {!editing && !selectionMode && (
-        <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-zinc-900/90 p-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-          {quick && onQuickOpen && (
-            <IconButton title={quick.title} onClick={() => onQuickOpen(clip)}>
-              {quick.icon}
-            </IconButton>
-          )}
-          {clip.sensitive && (
-            <IconButton
-              title={revealed ? "Hide" : "Reveal"}
-              onClick={() => setRevealed((r) => !r)}
-            >
-              {revealed ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </IconButton>
-          )}
-          {!isImage && !isFiles && (
-            <IconButton title="Edit" onClick={startEdit}>
-              <Pencil className="h-4 w-4" />
-            </IconButton>
-          )}
-          {/* "Apri posizione" disponibile solo per i file copiati dall'Explorer:
-              i PNG delle immagini sono cifrati su disco, mostrarli in Esplora
-              non avrebbe senso */}
-          {isFiles && onReveal && filePaths[0] && (
-            <IconButton
-              title="Open location"
-              onClick={() => onReveal(filePaths[0])}
-            >
-              <FolderOpen className="h-4 w-4" />
-            </IconButton>
-          )}
-          {isImage && onCopyImageAsFile && (
-            <IconButton
-              title="Copy as file (paste into a folder with Ctrl+V)"
-              onClick={() => onCopyImageAsFile(clip.id)}
-            >
-              <FileDown className="h-4 w-4" />
-            </IconButton>
-          )}
-          <IconButton
-            title={hasRich ? "Copy with formatting" : "Copy"}
-            onClick={() => onCopy(clip.id)}
-          >
-            <Copy className="h-4 w-4" />
-          </IconButton>
-          {hasRich && (
-            <IconButton
-              title="Copy as plain text"
-              onClick={() => onCopy(clip.id, true)}
-            >
-              <Type className="h-4 w-4" />
-            </IconButton>
-          )}
-          <IconButton
-            title={clip.pinned ? "Unpin" : "Pin"}
-            onClick={() => onTogglePin(clip)}
-          >
-            <Pin
-              className={`h-4 w-4 ${
-                clip.pinned ? "fill-amber-400 text-amber-400" : ""
-              }`}
-            />
-          </IconButton>
-          <IconButton title="Delete" danger onClick={() => onDelete(clip.id)}>
-            <Trash2 className="h-4 w-4" />
-          </IconButton>
         </div>
       )}
 

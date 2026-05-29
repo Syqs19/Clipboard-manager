@@ -42,6 +42,9 @@ function App() {
   const visibleRef = useRef<Clip[]>([]);
   const selRef = useRef(0);
   const modalRef = useRef(false);
+  // true mentre un popover "Copy as…" è aperto: sospende la navigazione ↑↓ così
+  // le frecce non scorrono la lista dietro al menu.
+  const popoverOpenRef = useRef(false);
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
@@ -146,7 +149,7 @@ function App() {
   // navigazione da tastiera: ↑↓ scorri, Invio incolla nell'app attiva, 1-9 rapido
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (modalRef.current) return;
+      if (modalRef.current || popoverOpenRef.current) return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA";
       const list = visibleRef.current;
@@ -241,6 +244,18 @@ function App() {
       notify("Image copied as a file — paste it anywhere with Ctrl+V", "success");
     } catch (e) {
       notify(`Couldn't copy the image as a file: ${e}`, "error");
+    }
+  };
+  // "Copy as": copia una versione trasformata del clip senza modificarlo.
+  // Le trasformazioni informative (es. "stats") ritornano una stringa da
+  // mostrare nel toast invece di toccare gli appunti.
+  const handleTransform = async (id: number, transform: string) => {
+    try {
+      const info = await api.copyTransformed(id, transform);
+      if (info != null) notify(info, "info");
+      else flashCopied(id);
+    } catch (e) {
+      notify(`Couldn't transform: ${e}`, "error");
     }
   };
   const handlePin = async (clip: Clip) => {
@@ -439,6 +454,10 @@ function App() {
             onReveal={handleReveal}
             onCopyImageAsFile={handleCopyImageAsFile}
             onQuickOpen={handleQuickOpen}
+            onTransform={handleTransform}
+            onPopoverOpenChange={(open) => {
+              popoverOpenRef.current = open;
+            }}
             highlightQuery={query}
             grouped={!query.trim()}
           />

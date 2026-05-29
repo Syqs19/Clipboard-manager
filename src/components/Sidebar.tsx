@@ -52,7 +52,7 @@ function Item({
     <button
       data-active={(sectionActive ?? active) ? "true" : undefined}
       onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-md py-1.5 pl-2.5 pr-5 text-sm transition-colors ${
         active
           ? "bg-zinc-700/60 text-zinc-100"
           : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
@@ -86,7 +86,7 @@ function SubItem({
   return (
     <button
       onClick={onClick}
-      className={`relative flex w-full items-center gap-2 rounded-md py-1 pl-9 pr-2.5 text-xs transition-colors ${
+      className={`relative flex w-full items-center gap-2 rounded-md py-1 pl-9 pr-5 text-xs transition-colors ${
         active
           ? "bg-zinc-700/40 text-zinc-100"
           : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300"
@@ -284,7 +284,7 @@ function TagRow({
   return (
     <div
       data-active={active ? "true" : undefined}
-      className={`group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+      className={`group flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pl-2.5 pr-5 text-sm transition-colors ${
         active
           ? "bg-zinc-700/60 text-zinc-100"
           : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
@@ -325,8 +325,10 @@ function TagRow({
           title="Doppio click per rinominare"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span className="flex-1 truncate">{name}</span>
-          <span className="text-xs text-zinc-500">{count}</span>
+          <span className="block max-w-[90px] flex-1 truncate md:max-w-[150px]">
+            {name}
+          </span>
+          <span className="shrink-0 text-xs text-zinc-500">{count}</span>
         </button>
       )}
       <button
@@ -417,7 +419,7 @@ export function Sidebar({
   return (
     <aside
       ref={asideRef}
-      className="relative flex h-full w-60 shrink-0 flex-col border-r border-zinc-800/60 bg-zinc-900/40 p-4 backdrop-blur-md"
+      className="relative flex h-full w-44 shrink-0 flex-col overflow-x-hidden border-r border-zinc-800/60 bg-zinc-900/40 p-4 backdrop-blur-md md:w-60"
     >
       {/* Brand header espandibile: logo + wordmark + chevron a destra */}
       <button
@@ -515,20 +517,20 @@ export function Sidebar({
 
             <div
               ref={tagScrollRef}
-              className={`flex min-h-0 flex-1 flex-col gap-2 ${
-                animatingCollapse ? "overflow-hidden" : "overflow-y-auto"
+              className={`flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-x-hidden ${
+                animatingCollapse ? "overflow-y-hidden" : "overflow-y-auto"
               }`}
             >
               {pinnedTags.length > 0 && (
-                <div className="flex flex-col gap-0.5">
+                <div className="flex w-full min-w-0 flex-col gap-0.5">
                   <div className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-zinc-600">
                     Pinned
                   </div>
                   {pinnedTags.map(renderTag)}
                 </div>
               )}
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center justify-between px-2.5 pb-1">
+              <div className="flex w-full min-w-0 flex-col gap-0.5">
+                <div className="flex items-center justify-between pb-1 pl-2.5 pr-5">
                   <span className="text-xs font-medium uppercase tracking-wide text-zinc-600">
                     Tags
                   </span>

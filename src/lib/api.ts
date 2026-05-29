@@ -27,6 +27,10 @@ export const api = {
     invoke<void>("copy_clip", { id, asPlain }),
   copyImageAsFile: (id: number) =>
     invoke<void>("copy_image_as_file", { id }),
+  /// Ritorna una stringa solo per le trasformazioni informative (es. "stats"),
+  /// che il frontend mostra in un toast; null quando ha copiato negli appunti.
+  copyTransformed: (id: number, transform: string) =>
+    invoke<string | null>("copy_transformed", { id, transform }),
   togglePin: (id: number, pinned: boolean) =>
     invoke<void>("toggle_pin", { id, pinned }),
   reorderPinned: (ids: number[]) => invoke<void>("reorder_pinned", { ids }),

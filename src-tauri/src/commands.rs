@@ -215,6 +215,56 @@ pub fn copy_image_as_file(
     Ok(())
 }
 
+/// Mette negli appunti una versione **trasformata** del clip, senza modificare
+/// quello salvato (feature "Paste as"). Per i clip di testo applica una delle
+/// trasformazioni pure di `transforms`; per le immagini scrive il PNG come
+/// stringa base64 (`base64`) o come immagine markdown con data-URI (`markdown`).
+///
+/// La trasformazione "stats" è informativa (conteggi): NON tocca gli appunti e
+/// ritorna la stringa, che il frontend mostra in un toast. Tutte le altre
+/// copiano il risultato e ritornano `None`.
+#[tauri::command]
+pub fn copy_transformed(
+    db: State<Database>,
+    key: State<Key>,
+    last_self_write: State<LastSelfWrite>,
+    id: i64,
+    transform: String,
+) -> Result<Option<String>, String> {
+    let clip = db
+        .get_clip(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "clip not found".to_string())?;
+
+    let out = if clip.content_type == "image" {
+        let path = clip.image_path.ok_or_else(|| "no image on disk".to_string())?;
+        let bytes = crate::images::load_png_bytes(std::path::Path::new(&path), key.inner())?;
+        let b64 = B64.encode(&bytes);
+        match transform.as_str() {
+            "base64" => b64,
+            "markdown" => format!("![](data:image/png;base64,{})", b64),
+            _ => return Err("unsupported image transform".into()),
+        }
+    } else {
+        let content = clip.content.ok_or_else(|| "clip has no text".to_string())?;
+        crate::transforms::apply(&transform, &content)
+            .ok_or_else(|| "transform not applicable to this content".to_string())?
+    };
+
+    // "stats" è solo informazione: ritorna senza copiare
+    if transform == "stats" {
+        return Ok(Some(out));
+    }
+
+    let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    // self-write guard: il watcher ignora il prossimo evento con questo hash
+    if let Ok(mut g) = last_self_write.lock() {
+        *g = Some(crate::db::content_hash(&out));
+    }
+    cb.set_text(out).map_err(|e| e.to_string())?;
+    Ok(None)
+}
+
 #[tauri::command]
 pub fn toggle_pin(db: State<Database>, id: i64, pinned: bool) -> Result<(), String> {
     db.set_pinned(id, pinned).map_err(|e| e.to_string())

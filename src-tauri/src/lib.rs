@@ -6,6 +6,7 @@ mod db;
 mod images;
 mod ocr;
 mod settings;
+mod transforms;
 mod tray;
 mod win_clipboard;
 
@@ -353,6 +354,7 @@ pub fn run() {
             commands::read_image_bytes,
             commands::get_stats,
             commands::copy_image_as_file,
+            commands::copy_transformed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

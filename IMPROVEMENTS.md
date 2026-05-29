@@ -97,10 +97,14 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ Fuzzy search across the whole history (content, preview, tags, OCR text), typo-tolerant and ranked
 - ✅ OCR on images via Windows.Media.Ocr (no external deps, offline) — search works inside screenshots; background OCR on capture + startup backfill; toggle in Settings → Security (on by default)
 - ✅ Quick actions on clips: open links in the browser, open files with the default app (`open_path` via ShellExecuteW). Email/mailto dropped (depends on an unpredictable OS default handler)
+- ✅ "Paste as" / transforms — "Copy as…" popover on text clips (UPPERCASE / lowercase / trim / slugify / pretty JSON, JSON disabled when the content isn't valid JSON) and on image clips (base64 / markdown `![](data:…)`). Pure transforms in `transforms.rs` (7 unit tests, 61 total); `copy_transformed` command reuses the self-write guard and never mutates the saved clip
 
 ### Next candidates (not yet done)
+- **Syntax highlighting** for code clips in the preview (frontend-only polish).
+- **Hex color swatch** — detect `#3b82f6`-style values and show a small color dot.
+- **Image size limit** — optional cap so a huge screenshot doesn't bloat the encrypted store (skip/limit images over N MB).
+- **List virtualization** — only worth it if the history limit is raised to thousands (with the default cap it isn't needed).
 - Code signing (paid certificate → removes SmartScreen warning on install)
-- Real screenshots in README
 
 ### Dropped (cost/benefit on a personal app)
 - ~~Optional passphrase~~ — typed at every launch, no recovery if forgotten.
