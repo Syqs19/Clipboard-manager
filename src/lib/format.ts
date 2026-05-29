@@ -38,6 +38,9 @@ export const TAG_COLORS = [
 /// dal nome (preso dalla palette, così è sempre un hex valido per <input type=color>).
 export function tagColor(name: string, override?: string | null): string {
   if (override) return override;
+  // il tag "Color" mostra lo swatch del contenuto accanto: tieni il suo dot
+  // neutro (bianco) così non si confonde col colore vero del clip.
+  if (name === "Color") return "#fafafa";
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return TAG_COLORS[h % TAG_COLORS.length];
@@ -63,6 +66,23 @@ export function splitMatches(
     if (at > i) out.push({ text: text.slice(i, at), match: false });
     out.push({ text: text.slice(at, at + q.length), match: true });
     i = at + q.length;
+  }
+  return out;
+}
+
+/// Trova i valori-colore CSS in `text` con la loro posizione.
+/// Riconosce hex (#rgb/#rgba/#rrggbb/#rrggbbaa), rgb()/rgba(), hsl()/hsla().
+/// Ritorna i match ordinati e non sovrapposti; `css` è il valore così com'è,
+/// usabile direttamente come `background-color` per lo swatch.
+export function detectColors(
+  text: string,
+): Array<{ start: number; end: number; css: string }> {
+  const re =
+    /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|(?:rgb|hsl)a?\([^)]*\)/g;
+  const out: Array<{ start: number; end: number; css: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    out.push({ start: m.index, end: m.index + m[0].length, css: m[0] });
   }
   return out;
 }

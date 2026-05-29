@@ -101,7 +101,6 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 
 ### Next candidates (not yet done)
 - **Syntax highlighting** for code clips in the preview (frontend-only polish).
-- **Hex color swatch** — detect `#3b82f6`-style values and show a small color dot.
 - **Image size limit** — optional cap so a huge screenshot doesn't bloat the encrypted store (skip/limit images over N MB).
 - **List virtualization** — only worth it if the history limit is raised to thousands (with the default cap it isn't needed).
 - Code signing (paid certificate → removes SmartScreen warning on install)

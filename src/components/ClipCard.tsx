@@ -22,7 +22,12 @@ import {
 import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
 import { TransformPicker } from "./TransformPicker";
-import { maskSensitive, relativeTime, splitMatches } from "../lib/format";
+import {
+  detectColors,
+  maskSensitive,
+  relativeTime,
+  splitMatches,
+} from "../lib/format";
 import { useImageUrl } from "../lib/useImageUrl";
 
 function IconButton({
@@ -161,6 +166,54 @@ export function ClipCard({
   const saveEdit = () => {
     if (editValue.trim()) onUpdate(clip.id, editValue);
     setEditing(false);
+  };
+
+  // Rende il testo del clip intrecciando: pallini-colore davanti a ogni
+  // valore-colore CSS rilevato (#hex/rgb/hsl) e highlight giallo dei match di
+  // ricerca. Lo swatch è grande abbastanza da distinguere bene la tinta.
+  const renderText = (value: string) => {
+    const colors = detectColors(value);
+    const out: React.ReactNode[] = [];
+    let cursor = 0;
+    let key = 0;
+
+    const pushPlain = (chunk: string) => {
+      if (!chunk) return;
+      if (highlightQuery && highlightQuery.trim()) {
+        for (const seg of splitMatches(chunk, highlightQuery)) {
+          out.push(
+            seg.match ? (
+              <mark
+                key={key++}
+                className="rounded bg-amber-400/30 px-0.5 text-amber-100"
+              >
+                {seg.text}
+              </mark>
+            ) : (
+              <span key={key++}>{seg.text}</span>
+            ),
+          );
+        }
+      } else {
+        out.push(<span key={key++}>{chunk}</span>);
+      }
+    };
+
+    for (const c of colors) {
+      pushPlain(value.slice(cursor, c.start));
+      out.push(
+        <span
+          key={key++}
+          title={c.css}
+          style={{ backgroundColor: c.css }}
+          className="mr-1.5 inline-block h-4 w-4 shrink-0 -translate-y-px rounded border border-zinc-600/80 align-middle"
+        />,
+      );
+      pushPlain(value.slice(c.start, c.end));
+      cursor = c.end;
+    }
+    pushPlain(value.slice(cursor));
+    return out;
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -395,24 +448,7 @@ export function ClipCard({
             masked ? "font-mono tracking-wide text-zinc-400" : "text-zinc-100"
           }`}
         >
-          {!text ? (
-            "(empty)"
-          ) : highlightQuery && highlightQuery.trim() && !masked ? (
-            splitMatches(text, highlightQuery).map((seg, i) =>
-              seg.match ? (
-                <mark
-                  key={i}
-                  className="rounded bg-amber-400/30 px-0.5 text-amber-100"
-                >
-                  {seg.text}
-                </mark>
-              ) : (
-                <span key={i}>{seg.text}</span>
-              ),
-            )
-          ) : (
-            text
-          )}
+          {!text ? "(empty)" : masked ? text : renderText(text)}
         </p>
       )}
 

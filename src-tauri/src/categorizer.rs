@@ -19,6 +19,15 @@ static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$").unwrap()
 });
 
+/// Valore-colore CSS che occupa l'intero contenuto: hex (#rgb/#rgba/#rrggbb/
+/// #rrggbbaa) oppure funzione rgb()/rgba()/hsl()/hsla(). Case-insensitive.
+static COLOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^(#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|(rgb|hsl)a?\([^)]*\))$",
+    )
+    .unwrap()
+});
+
 /// IBAN: 2 lettere + 2 cifre + 10-30 alfanumerici (spazi rimossi prima).
 static IBAN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$").unwrap());
@@ -99,6 +108,9 @@ fn classify(trimmed: &str, original: &str) -> (&'static str, &'static str) {
     }
     if EMAIL_RE.is_match(trimmed) {
         return ("text", "Email");
+    }
+    if COLOR_RE.is_match(trimmed) {
+        return ("text", "Color");
     }
     if is_numeric_like(trimmed) {
         return ("text", "Numbers");
@@ -274,6 +286,23 @@ mod tests {
     fn code() {
         assert_eq!(categorize("fn main() { println!(\"hi\"); }").tag, "Code");
         assert_eq!(categorize("import os\ndef f():\n    return 1").tag, "Code");
+    }
+
+    #[test]
+    fn color_values_get_color_tag() {
+        // hex e funzioni colore puri → "Color", non "Code"/"Numbers"
+        assert_eq!(categorize("#3b82f6").tag, "Color");
+        assert_eq!(categorize("#abc").tag, "Color");
+        assert_eq!(categorize("#3b82f680").tag, "Color");
+        assert_eq!(categorize("rgb(59, 130, 246)").tag, "Color");
+        assert_eq!(categorize("rgba(239, 68, 68, 0.5)").tag, "Color");
+        assert_eq!(categorize("hsl(217, 91%, 60%)").tag, "Color");
+        // case-insensitive
+        assert_eq!(categorize("#FFF").tag, "Color");
+        // testo con un colore dentro NON è solo un colore → non "Color"
+        assert_ne!(categorize("color: #3b82f6;").tag, "Color");
+        // un colore non è mai sensibile
+        assert!(!categorize("#3b82f6").sensitive);
     }
 
     #[test]
