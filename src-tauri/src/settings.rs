@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, RwLock};
 /// ogni copia interna). Consume-on-match: viene messo a None dopo l'uso.
 pub type LastSelfWrite = Arc<Mutex<Option<String>>>;
 
-pub const DEFAULT_MAX_HISTORY: i64 = 200;
+pub const DEFAULT_MAX_HISTORY: i64 = 5000;
 pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+V";
 
 /// Categorie considerate sensibili ai fini della cancellazione/non-salvataggio.

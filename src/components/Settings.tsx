@@ -119,7 +119,7 @@ export function Settings({
   const [autostart, setAutostart] = useState(false);
   const [startHidden, setStartHidden] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
-  const [maxHistory, setMaxHistory] = useState(200);
+  const [maxHistory, setMaxHistory] = useState(5000);
   const [hotkey, setHotkey] = useState("Ctrl+Shift+V");
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState("");
@@ -148,7 +148,7 @@ export function Settings({
       const store = await Store.load("settings.json");
       setStartHidden((await store.get<boolean>("startHidden")) ?? false);
       setCloseToTray((await store.get<boolean>("closeToTray")) ?? true);
-      setMaxHistory((await store.get<number>("maxHistory")) ?? 200);
+      setMaxHistory((await store.get<number>("maxHistory")) ?? 5000);
       setHotkey((await store.get<string>("hotkey")) ?? "Ctrl+Shift+V");
       setDontSaveSensitive((await store.get<boolean>("dontSaveSensitive")) ?? false);
       setSensitiveTtl((await store.get<number>("sensitiveTtlMinutes")) ?? 0);

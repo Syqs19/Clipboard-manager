@@ -6,7 +6,7 @@
 
 use crate::crypto::MasterKey;
 use crate::db::{Clip, Db, NewClip};
-use crate::settings::{LastSelfWrite, RuntimeState};
+use crate::settings::{LastSelfWrite, RuntimeState, DEFAULT_MAX_HISTORY};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use fuzzy_matcher::skim::SkimMatcherV2;
@@ -22,7 +22,9 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 type Database = Arc<Db>;
 type Key = Arc<MasterKey>;
 
-const DEFAULT_LIMIT: i64 = 200;
+// se il frontend non passa un limite, carica fino al tetto della cronologia
+// (così la UI mostra tutte le clip conservate, non un sottoinsieme)
+const DEFAULT_LIMIT: i64 = DEFAULT_MAX_HISTORY;
 
 #[tauri::command]
 pub fn list_clips(db: State<Database>, limit: Option<i64>) -> Result<Vec<Clip>, String> {

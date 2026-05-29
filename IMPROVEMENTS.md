@@ -102,11 +102,12 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ **Drag clips onto sidebar tags** to tag them — single card or multi-selection (bulk). Single shared `DndContext` in App spanning sidebar + list; preserves pinned reorder, click-to-copy, multi-select, 8px activation. Custom collision detection (overlay-rect centered on cursor) so a tag activates only when the card visually overlaps it. Overlay centered on cursor + cursor hidden, real image thumbnail / file basename / stacked-card preview with count badge. Tall images clipped to a fixed max-height in the card. Animations: tag glow pulse on hover, confirm pop, ghost flying into the tag, delayed chip pop — all respect reduced-motion
 - ✅ **Image size limit** — optional cap (off by default) in Settings → Security. Measured on the compressed PNG size (MB); images over the limit are skipped (they stay on the Windows clipboard). New `max_image_bytes` atomic + `apply_max_image_bytes` command; `images::save_png_bytes` avoids re-encoding
 - ✅ **Responsive Settings dialog** — fixed-height scrollable body so the modal stays put when switching tabs; tabs wrap instead of overflowing; modal capped at `max-h-[85vh]`
+- ✅ **History limit default 200 → 5000** — `DEFAULT_MAX_HISTORY` and `list_clips`' `DEFAULT_LIMIT` (now points at it, so the UI loads everything kept, not just 200). Existing user-set values are preserved
+- ✅ **Syntax highlighting** for code clips — `CodeBlock` (highlight.js "common" bundle + github-dark theme) on clips tagged "Code", shown when no search query is active (avoids clashing with the yellow match highlight). hljs output is escaped, no XSS from clipboard content
 
 ### Next candidates (not yet done)
-- **Syntax highlighting** for code clips in the preview (frontend-only polish).
 - **Merge clips by drag** — drag an image onto another image (or file onto file) to combine them into one card sharing tags; text would need a defined join behavior. Deferred from the drag-to-tag work: needs a new multi-content data model and conflicts with pinned reorder — wants dedicated design.
-- **List virtualization** — only worth it if the history limit is raised to thousands (with the default cap it isn't needed).
+- **List virtualization** — deferred: history default is now 5000, but we ship without virtualization first; add it only if large histories actually lag (would need to coexist with date groups, drag-to-tag, animations).
 - Code signing (paid certificate → removes SmartScreen warning on install)
 
 ### Dropped (cost/benefit on a personal app)

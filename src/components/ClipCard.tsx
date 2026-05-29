@@ -22,6 +22,7 @@ import {
 import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
 import { TransformPicker } from "./TransformPicker";
+import { CodeBlock } from "./CodeBlock";
 import {
   detectColors,
   maskSensitive,
@@ -132,6 +133,9 @@ export function ClipCard({
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
   const isFiles = clip.content_type === "files";
+  // clip di codice (tag automatico "Code"): syntax highlighting nell'anteprima,
+  // ma solo senza ricerca attiva (l'highlight dei match userebbe gli stessi nodi)
+  const isCode = clip.tags.includes("Code");
   // i PNG su disco sono cifrati: il backend li decifra e li serve come blob
   const thumbUrl = useImageUrl(
     isImage ? clip.thumb_path ?? clip.image_path : null,
@@ -445,6 +449,8 @@ export function ClipCard({
             </div>
           )}
         </div>
+      ) : isCode && !masked && text && !(highlightQuery && highlightQuery.trim()) ? (
+        <CodeBlock code={text} />
       ) : (
         <p
           // key cambia ad ogni toggle mask/reveal → la fade-in riparte
