@@ -147,6 +147,10 @@ pub struct Clip {
     pub sensitive: bool,
     pub hash: String,
     pub tags: Vec<String>,
+    /// Testo riconosciuto via OCR per le immagini (NULL altrimenti). Usato solo
+    /// per la ricerca, non serve al frontend → non serializzato.
+    #[serde(skip_serializing)]
+    pub ocr_text: Option<String>,
 }
 
 /// Dati per inserire una nuova clip (l'id lo assegna il DB).
@@ -180,7 +184,7 @@ pub struct Db {
 }
 
 const SELECT_COLS: &str =
-    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash, content_html, content_rtf";
+    "id, content, content_type, image_path, preview, created_at, pinned, pinned_order, char_count, sensitive, hash, content_html, content_rtf, ocr_text";
 
 impl Db {
     /// Apre il DB cifrato con SQLCipher. Se trova un DB pre-esistente in
@@ -207,6 +211,7 @@ impl Db {
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN sensitive_kind TEXT", []);
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN content_html TEXT", []);
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN content_rtf TEXT", []);
+        let _ = conn.execute("ALTER TABLE clips ADD COLUMN ocr_text TEXT", []);
         let _ = conn.execute(
             "ALTER TABLE tags ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
             [],
@@ -480,6 +485,28 @@ impl Db {
         Ok(DbStats { total, pinned, images, sensitive, tags })
     }
 
+    /// Salva il testo OCR di una clip immagine (per renderla ricercabile).
+    pub fn set_ocr_text(&self, id: i64, text: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE clips SET ocr_text = ?2 WHERE id = ?1",
+            params![id, text],
+        )?;
+        Ok(())
+    }
+
+    /// (id, image_path) delle clip immagine ancora prive di testo OCR.
+    /// Usato per il backfill all'avvio quando l'OCR è attivo.
+    pub fn images_needing_ocr(&self) -> rusqlite::Result<Vec<(i64, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, image_path FROM clips
+             WHERE content_type = 'image' AND image_path IS NOT NULL AND ocr_text IS NULL",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect()
+    }
+
     // ----- tag -----
 
     pub fn get_or_create_tag(
@@ -706,6 +733,7 @@ impl Db {
             hash: row.get(10)?,
             content_html: row.get(11)?,
             content_rtf: row.get(12)?,
+            ocr_text: row.get(13)?,
             tags: Vec::new(),
         })
     }

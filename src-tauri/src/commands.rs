@@ -9,6 +9,8 @@ use crate::db::{Clip, Db, NewClip};
 use crate::settings::{LastSelfWrite, RuntimeState};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -29,11 +31,46 @@ pub fn list_clips(db: State<Database>, limit: Option<i64>) -> Result<Vec<Clip>, 
 
 #[tauri::command]
 pub fn search_clips(db: State<Database>, query: String) -> Result<Vec<Clip>, String> {
-    if query.trim().is_empty() {
-        db.list_recent(DEFAULT_LIMIT).map_err(|e| e.to_string())
-    } else {
-        db.search(query.trim()).map_err(|e| e.to_string())
+    let q = query.trim();
+    if q.is_empty() {
+        return db.list_recent(DEFAULT_LIMIT).map_err(|e| e.to_string());
     }
+    // carica tutta la cronologia e classifica per pertinenza fuzzy in memoria
+    // (la history è limitata, quindi è veloce)
+    let all = db.list_recent(i64::MAX).map_err(|e| e.to_string())?;
+    Ok(fuzzy_rank(all, q))
+}
+
+/// Ordina le clip per pertinenza fuzzy rispetto a `query` (tollera refusi e match
+/// parziali), considerando contenuto, preview, testo OCR e tag. Scarta i non-match.
+fn fuzzy_rank(clips: Vec<Clip>, query: &str) -> Vec<Clip> {
+    let matcher = SkimMatcherV2::default();
+    let mut scored: Vec<(i64, Clip)> = clips
+        .into_iter()
+        .filter_map(|c| {
+            let tags_joined = c.tags.join(" ");
+            let mut best: Option<i64> = None;
+            let fields = [
+                c.content.as_deref(),
+                Some(c.preview.as_str()),
+                c.ocr_text.as_deref(),
+                if tags_joined.is_empty() {
+                    None
+                } else {
+                    Some(tags_joined.as_str())
+                },
+            ];
+            for s in fields.into_iter().flatten() {
+                if let Some(score) = matcher.fuzzy_match(s, query) {
+                    best = Some(best.map_or(score, |b| b.max(score)));
+                }
+            }
+            best.map(|score| (score, c))
+        })
+        .collect();
+    // pertinenza desc, a parità i più recenti prima
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.created_at.cmp(&a.1.created_at)));
+    scored.into_iter().map(|(_, c)| c).collect()
 }
 
 /// Mette il contenuto completo della clip nella clipboard di sistema

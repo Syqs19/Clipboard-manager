@@ -98,6 +98,7 @@ export function ClipList({
   onReveal,
   onCopyImageAsFile,
   highlightQuery,
+  grouped = true,
 }: {
   clips: Clip[];
   selectedIndex: number;
@@ -121,6 +122,8 @@ export function ClipList({
   onReveal: (path: string) => void;
   onCopyImageAsFile: (id: number) => void;
   highlightQuery: string;
+  /// false in ricerca: lista piatta per pertinenza, senza header data né riordino pinnati.
+  grouped?: boolean;
 }) {
   // animazione di uscita: tengo gli id in via di eliminazione per ~240ms
   // così la classe `anim-clip-exit` gira prima del vero unmount.
@@ -158,17 +161,19 @@ export function ClipList({
   // Riordino visivo: sostituisco le posizioni delle clip pinnate seguendo
   // pinnedIds (preservando l'ordine delle non-pinnate).
   const clipById = new Map(clips.map((c) => [c.id, c]));
-  const orderedClips: Clip[] = [];
+  const reordered: Clip[] = [];
   let pinnedCursor = 0;
   for (const c of clips) {
     if (c.pinned) {
       const id = pinnedIds[pinnedCursor++];
       const replacement = clipById.get(id);
-      if (replacement) orderedClips.push(replacement);
+      if (replacement) reordered.push(replacement);
     } else {
-      orderedClips.push(c);
+      reordered.push(c);
     }
   }
+  // in ricerca (flat) niente riordino dei pinnati: si tiene l'ordine per pertinenza
+  const orderedClips = grouped ? reordered : clips;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -207,7 +212,7 @@ export function ClipList({
         <div className="flex flex-col gap-2.5">
           {orderedClips.map((clip, i) => {
             const bucket = bucketOf(clip, now);
-            const showHeader = bucket !== lastBucket;
+            const showHeader = grouped && bucket !== lastBucket;
             lastBucket = bucket;
             // slide-in solo per la clip "in cima" appena flashata (nuova
             // cattura o risalita per dedup)
@@ -256,7 +261,7 @@ export function ClipList({
                     <span className="h-px flex-1 bg-zinc-800" />
                   </div>
                 )}
-                {clip.pinned ? (
+                {clip.pinned && grouped ? (
                   <SortableCard id={clip.id}>{card}</SortableCard>
                 ) : (
                   card

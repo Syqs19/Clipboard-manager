@@ -32,6 +32,7 @@ png = "0.18.1"
 base64 = "0.22"
 aes-gcm = "0.10"
 rand = "0.8"
+fuzzy-matcher = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

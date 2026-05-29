@@ -424,6 +424,7 @@ function App() {
             onReveal={handleReveal}
             onCopyImageAsFile={handleCopyImageAsFile}
             highlightQuery={query}
+            grouped={!query.trim()}
           />
         </div>
       </main>
