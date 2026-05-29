@@ -133,6 +133,51 @@ pub fn read_image_bytes(key: State<Key>, path: String) -> Result<Response, Strin
     Ok(Response::new(bytes))
 }
 
+/// Mette un'immagine della cronologia negli appunti **come file** (CF_HDROP),
+/// così l'utente può incollarla in una cartella con Ctrl+V. Il PNG è cifrato su
+/// disco: lo decifro in una cartella temporanea dedicata (ripulita ad ogni uso,
+/// così resta al massimo una copia in chiaro) e metto quel percorso negli appunti.
+#[tauri::command]
+pub fn copy_image_as_file(
+    app: AppHandle,
+    db: State<Database>,
+    key: State<Key>,
+    last_self_write: State<LastSelfWrite>,
+    id: i64,
+) -> Result<(), String> {
+    let clip = db
+        .get_clip(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "clip not found".to_string())?;
+    if clip.content_type != "image" {
+        return Err("not an image clip".into());
+    }
+    let src = clip.image_path.ok_or_else(|| "no image on disk".to_string())?;
+    let bytes = crate::images::load_png_bytes(std::path::Path::new(&src), key.inner())?;
+
+    let tmp_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("tmp_export");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+    let dest = tmp_dir.join("clipboard-image.png");
+    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+
+    let paths = vec![dest.to_string_lossy().to_string()];
+    // segnala self-write: il watcher non deve trasformare il file temporaneo
+    // in una clip "files" (l'hash combacia con quello calcolato in capture_files)
+    let watcher_json = serde_json::to_string(&paths).map_err(|e| e.to_string())?;
+    if let Ok(mut g) = last_self_write.lock() {
+        *g = Some(crate::db::content_hash(&watcher_json));
+    }
+    if !crate::win_clipboard::write_file_drop(&paths) {
+        return Err("Couldn't put the image on the clipboard as a file".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn toggle_pin(db: State<Database>, id: i64, pinned: bool) -> Result<(), String> {
     db.set_pinned(id, pinned).map_err(|e| e.to_string())

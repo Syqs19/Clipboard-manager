@@ -233,6 +233,15 @@ function App() {
     api.copyClip(id, asPlain);
     flashCopied(id);
   };
+  const handleCopyImageAsFile = async (id: number) => {
+    try {
+      await api.copyImageAsFile(id);
+      flashCopied(id);
+      notify("Image copied as a file — paste it anywhere with Ctrl+V", "success");
+    } catch (e) {
+      notify(`Couldn't copy the image as a file: ${e}`, "error");
+    }
+  };
   const handlePin = async (clip: Clip) => {
     await api.togglePin(clip.id, !clip.pinned);
     reload();
@@ -413,6 +422,7 @@ function App() {
             selectionMode={selectedIds.size > 0}
             allTags={tags}
             onReveal={handleReveal}
+            onCopyImageAsFile={handleCopyImageAsFile}
             highlightQuery={query}
           />
         </div>
@@ -429,6 +439,7 @@ function App() {
         clip={previewClip}
         onClose={() => setPreviewClip(null)}
         onCopy={handleCopy}
+        onCopyAsFile={handleCopyImageAsFile}
       />
 
       <Onboarding

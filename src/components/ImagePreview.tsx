@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Copy, Check } from "lucide-react";
+import { X, Copy, Check, FileDown } from "lucide-react";
 import { type Clip } from "../lib/api";
 import { useImageUrl } from "../lib/useImageUrl";
 import { useExitAnimation } from "../lib/useExitAnimation";
@@ -8,10 +8,12 @@ export function ImagePreview({
   clip,
   onClose,
   onCopy,
+  onCopyAsFile,
 }: {
   clip: Clip | null;
   onClose: () => void;
   onCopy: (id: number) => void;
+  onCopyAsFile: (id: number) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const fullUrl = useImageUrl(clip?.image_path ?? null);
@@ -61,6 +63,13 @@ export function ImagePreview({
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           {copied ? "Copied" : "Copy"}
+        </button>
+        <button
+          onClick={() => onCopyAsFile(clip.id)}
+          title="Copy as file (paste into a folder with Ctrl+V)"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
+        >
+          <FileDown className="h-4 w-4" /> Copy as file
         </button>
       </div>
       <button

@@ -25,6 +25,8 @@ export const api = {
   searchClips: (query: string) => invoke<Clip[]>("search_clips", { query }),
   copyClip: (id: number, asPlain = false) =>
     invoke<void>("copy_clip", { id, asPlain }),
+  copyImageAsFile: (id: number) =>
+    invoke<void>("copy_image_as_file", { id }),
   togglePin: (id: number, pinned: boolean) =>
     invoke<void>("toggle_pin", { id, pinned }),
   reorderPinned: (ids: number[]) => invoke<void>("reorder_pinned", { ids }),

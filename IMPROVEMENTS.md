@@ -92,6 +92,8 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ Stats panel (Settings tab): total clips, pinned, images, sensitive, tags + disk usage (encrypted DB + images). New `get_stats` command, `Db::stats()` with test
 - ✅ More sensitive categories: Codice Fiscale (IT), US SSN, private/SSH keys, JWT, crypto addresses, mask-only strings — beyond email/IBAN/card/token (54 backend tests total)
 - ✅ Settings → About panel: app version (runtime `getVersion`), GitHub repo link (opener), license
+- ✅ Proprietary license (all rights reserved) + real README screenshots
+- ✅ "Copy image as file" — puts an image clip on the clipboard as CF_HDROP (decrypted to a cleaned temp dir) so it can be pasted into a folder with Ctrl+V; button on the card and in the preview
 
 ### Next candidates (not yet done)
 - Code signing (paid certificate → removes SmartScreen warning on install)

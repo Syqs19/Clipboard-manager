@@ -96,6 +96,7 @@ export function ClipList({
   selectionMode,
   allTags,
   onReveal,
+  onCopyImageAsFile,
   highlightQuery,
 }: {
   clips: Clip[];
@@ -118,6 +119,7 @@ export function ClipList({
   selectionMode: boolean;
   allTags: [string, number, string | null, boolean][];
   onReveal: (path: string) => void;
+  onCopyImageAsFile: (id: number) => void;
   highlightQuery: string;
 }) {
   // animazione di uscita: tengo gli id in via di eliminazione per ~240ms
@@ -230,6 +232,7 @@ export function ClipList({
                 onSetTagColor={onSetTagColor}
                 onBulkClick={(e) => onBulkClick(i, e)}
                 onReveal={onReveal}
+                onCopyImageAsFile={onCopyImageAsFile}
                 selectModifier={selectModifier}
                 selectionMode={selectionMode}
                 allTags={allTags}

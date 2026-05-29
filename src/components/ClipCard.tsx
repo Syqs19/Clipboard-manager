@@ -6,6 +6,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  FileDown,
   FileText,
   FolderOpen,
   Pencil,
@@ -65,6 +66,7 @@ export function ClipCard({
   onSetTagColor,
   onBulkClick,
   onReveal,
+  onCopyImageAsFile,
   selectModifier,
   selectionMode,
   allTags,
@@ -87,6 +89,7 @@ export function ClipCard({
   onSetTagColor: (name: string, color: string) => void;
   onBulkClick?: (e: React.MouseEvent) => void;
   onReveal?: (path: string) => void;
+  onCopyImageAsFile?: (id: number) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
   allTags: [string, number, string | null, boolean][];
@@ -407,6 +410,14 @@ export function ClipCard({
               onClick={() => onReveal(filePaths[0])}
             >
               <FolderOpen className="h-4 w-4" />
+            </IconButton>
+          )}
+          {isImage && onCopyImageAsFile && (
+            <IconButton
+              title="Copy as file (paste into a folder with Ctrl+V)"
+              onClick={() => onCopyImageAsFile(clip.id)}
+            >
+              <FileDown className="h-4 w-4" />
             </IconButton>
           )}
           <IconButton

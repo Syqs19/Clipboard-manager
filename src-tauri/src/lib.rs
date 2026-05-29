@@ -298,6 +298,7 @@ pub fn run() {
             commands::reveal_in_explorer,
             commands::read_image_bytes,
             commands::get_stats,
+            commands::copy_image_as_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
