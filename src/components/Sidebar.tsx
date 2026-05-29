@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { useExitAnimation } from "../lib/useExitAnimation";
 import { UpdateButton } from "./UpdateButton";
 import {
@@ -273,6 +274,18 @@ function TagRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
+  // flash "pop" di conferma quando una card viene rilasciata su questo tag
+  const [received, setReceived] = useState(false);
+
+  // droppable: trascinando una card su questa riga si aggiunge il tag alla clip
+  const { setNodeRef, isOver } = useDroppable({ id: `tag:${name}` });
+  useDndMonitor({
+    onDragEnd: ({ over }) => {
+      if (over?.id !== `tag:${name}`) return;
+      setReceived(true);
+      window.setTimeout(() => setReceived(false), 420);
+    },
+  });
 
   const commit = () => {
     const v = draft.trim();
@@ -283,8 +296,11 @@ function TagRow({
 
   return (
     <div
+      ref={setNodeRef}
       data-active={active ? "true" : undefined}
       className={`group flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pl-2.5 pr-5 text-sm transition-colors ${
+        isOver ? "anim-tag-hover bg-emerald-500/10" : ""
+      } ${received ? "anim-tag-received" : ""} ${
         active
           ? "bg-zinc-700/60 text-zinc-100"
           : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"

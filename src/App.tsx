@@ -2,6 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier,
+} from "@dnd-kit/core";
+import { useImageUrl } from "./lib/useImageUrl";
+import {
   api,
   onClipsChanged,
   onOpenSettings,
@@ -20,6 +33,130 @@ import { ImagePreview } from "./components/ImagePreview";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
+
+/// Collision detection ibrida.
+/// Per i tag: la hitbox è il rettangolo dell'OVERLAY reale (dove la card è
+/// disegnata), non quello della card originale nella lista. snapCenterToCursor
+/// centra l'overlay sul puntatore, quindi ricostruiamo lo stesso rettangolo
+/// (dimensioni della card centrate su pointerCoordinates) e lo intersechiamo
+/// con ogni riga-tag: basta 1px di sovrapposizione visiva. Niente più
+/// attivazioni "da lontano" causate dalla larghezza piena della card.
+/// Per il riordino card: closestCenter come prima (tag esclusi dai candidati).
+const collisionDetection: CollisionDetection = (args) => {
+  const { pointerCoordinates, droppableContainers } = args;
+  const tags = droppableContainers.filter((c) =>
+    String(c.id).startsWith("tag:"),
+  );
+
+  if (pointerCoordinates && tags.length > 0) {
+    // hitbox a dimensione fissa centrata sul cursore (≈ overlay). Non usiamo
+    // collisionRect: per le immagini l'overlay parte a 0×0 finché il blob non
+    // è caricato, e la hitbox risulterebbe un punto → mai intersezione.
+    const w = 200;
+    const h = 80;
+    const ox = pointerCoordinates.x - w / 2;
+    const oy = pointerCoordinates.y - h / 2;
+    let best: { id: string | number; area: number } | null = null;
+    for (const c of tags) {
+      const r = c.rect.current;
+      if (!r) continue;
+      const ix = Math.max(0, Math.min(ox + w, r.left + r.width) - Math.max(ox, r.left));
+      const iy = Math.max(0, Math.min(oy + h, r.top + r.height) - Math.max(oy, r.top));
+      const area = ix * iy;
+      if (area > 0 && (!best || area > best.area)) best = { id: c.id, area };
+    }
+    if (best) return [{ id: best.id }];
+  }
+
+  // niente tag intersecato → riordino card, escludendo i tag dai candidati
+  return closestCenter({
+    ...args,
+    droppableContainers: droppableContainers.filter(
+      (c) => !String(c.id).startsWith("tag:"),
+    ),
+  });
+};
+
+/// Centra la DragOverlay sul cursore invece di ancorarla all'angolo in alto a
+/// sinistra dell'elemento: così la card "presa" segue il punto di presa.
+const snapCenterToCursor: Modifier = ({
+  activatorEvent,
+  draggingNodeRect,
+  transform,
+}) => {
+  if (!draggingNodeRect || !activatorEvent) return transform;
+  const rect = draggingNodeRect;
+  const ev = activatorEvent as PointerEvent;
+  const offsetX = ev.clientX - rect.left;
+  const offsetY = ev.clientY - rect.top;
+  return {
+    ...transform,
+    x: transform.x + offsetX - rect.width / 2,
+    y: transform.y + offsetY - rect.height / 2,
+  };
+};
+
+/// Contenuto dell'anteprima (immagine / file / testo) di una singola clip.
+function DragPreviewBody({ clip }: { clip: Clip }) {
+  const isImage = clip.content_type === "image" && !!clip.image_path;
+  const thumb = useImageUrl(isImage ? clip.thumb_path ?? clip.image_path : null);
+  if (isImage) {
+    return thumb ? (
+      <img
+        src={thumb}
+        alt={clip.preview}
+        className="max-h-24 max-w-[200px] rounded-lg border border-zinc-700 object-contain shadow-xl"
+      />
+    ) : (
+      <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 shadow-xl">
+        Image
+      </div>
+    );
+  }
+  // per i file mostra il nome (basename), non il percorso completo
+  const label =
+    clip.content_type === "files"
+      ? fileLabel(clip.content)
+      : clip.preview || clip.content || "";
+  return (
+    <div className="max-w-[260px] truncate rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 shadow-xl">
+      {label}
+    </div>
+  );
+}
+
+/// Anteprima della clip trascinata. Con `stackCount > 1` (drag di una selezione
+/// multipla) disegna un piccolo "mazzo" di card dietro e un badge col totale.
+function DragPreview({ clip, stackCount = 1 }: { clip: Clip; stackCount?: number }) {
+  if (stackCount <= 1) return <DragPreviewBody clip={clip} />;
+  return (
+    <div className="relative w-fit">
+      {/* layer dietro sfalsati: danno l'idea del mazzo */}
+      <div className="absolute inset-0 -translate-x-1.5 -translate-y-1.5 rounded-lg border border-zinc-700 bg-zinc-800/80 shadow-lg" />
+      <div className="absolute inset-0 -translate-x-0.5 -translate-y-0.5 rounded-lg border border-zinc-700 bg-zinc-800/90 shadow-lg" />
+      <div className="relative w-fit">
+        <DragPreviewBody clip={clip} />
+      </div>
+      <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-semibold text-white shadow-md">
+        {stackCount}
+      </span>
+    </div>
+  );
+}
+
+/// Etichetta per una clip di tipo "files": nome del primo file (+N altri),
+/// invece del percorso completo. `content` è un JSON array di path.
+function fileLabel(content: string | null): string {
+  if (!content) return "";
+  try {
+    const paths = JSON.parse(content);
+    if (!Array.isArray(paths) || paths.length === 0) return "";
+    const name = String(paths[0]).split(/[\\/]/).pop() || String(paths[0]);
+    return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
+  } catch {
+    return "";
+  }
+}
 
 function App() {
   const notify = useNotify();
@@ -381,8 +518,94 @@ function App() {
   const colorOf = (name: string) =>
     tagColor(name, tags.find((t) => t[0] === name)?.[2] ?? null);
 
+  // --- Drag & drop (unico DndContext per Sidebar + lista) ---
+  // Il drag parte dopo 8px così un click breve resta un click (copia/selezione).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+  // id della clip in trascinamento (per la DragOverlay); null = nessun drag
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  // handler di riordino pinnati registrato dalla ClipList (lo stato ottimistico
+  // vive lì dentro, qui chiamiamo solo la funzione al drop su un'altra card)
+  const reorderRef = useRef<(activeId: number, overId: number) => void>(() => {});
+  const draggingClip = clips.find((c) => c.id === draggingId) ?? null;
+  // quante card verranno taggate dal drop: tutta la selezione se trascino una
+  // card selezionata (≥2), altrimenti 1. Guida lo stack nell'anteprima.
+  const dragStackCount =
+    draggingId != null && selectedIds.has(draggingId) && selectedIds.size > 1
+      ? selectedIds.size
+      : 1;
+  // ultima posizione del puntatore durante il drag (per far partire da lì il
+  // "fantasma" che cade dentro il tag, dato che il cursore è nascosto)
+  const pointerRef = useRef({ x: 0, y: 0 });
+  // fantasma che vola dentro il tag al drop: posizione di partenza + vettore
+  const [flying, setFlying] = useState<{
+    clip: Clip;
+    count: number;
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+  } | null>(null);
+
+  const onDragStart = (event: DragStartEvent) => {
+    setDraggingId(event.active.id as number);
+    // nascondi il cursore mentre trascini: la card stessa fa da puntatore
+    document.body.classList.add("dragging-clip");
+    window.addEventListener("pointermove", trackPointer);
+  };
+  const trackPointer = (e: PointerEvent) => {
+    pointerRef.current = { x: e.clientX, y: e.clientY };
+  };
+  const onDragEnd = (event: DragEndEvent) => {
+    const clip = draggingClip;
+    setDraggingId(null);
+    document.body.classList.remove("dragging-clip");
+    window.removeEventListener("pointermove", trackPointer);
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = active.id as number;
+    if (typeof over.id === "string" && over.id.startsWith("tag:")) {
+      const tagName = over.id.slice(4);
+      // se trascini una card che fa parte della selezione multipla, il drop
+      // tagga tutte le selezionate; altrimenti solo quella trascinata.
+      const sel = selectedIdsRef.current;
+      const ids = sel.has(activeId) && sel.size > 1 ? Array.from(sel) : [activeId];
+      // scrivi subito nel DB, ma fai comparire le chip solo dopo che il
+      // "fantasma" è atterrato (reload ritardato)
+      const write =
+        ids.length > 1 ? api.bulkAddTag(ids, tagName) : api.addTag(activeId, tagName);
+      write.then(() => window.setTimeout(() => reload(), 460));
+      // fantasma che converge verso il centro del tag dal punto di rilascio
+      const r = over.rect;
+      if (clip && r) {
+        const from = pointerRef.current;
+        const tx = r.left + r.width / 2;
+        const ty = r.top + r.height / 2;
+        setFlying({
+          clip,
+          count: ids.length,
+          x: from.x,
+          y: from.y,
+          dx: tx - from.x,
+          dy: ty - from.y,
+        });
+        window.setTimeout(() => setFlying(null), 360);
+      }
+      return;
+    }
+    // altrimenti drop su un'altra card → riordino dei pinnati
+    if (active.id !== over.id) reorderRef.current(activeId, over.id as number);
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-transparent text-zinc-100">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
       <Sidebar
         filter={filter}
         onSelect={setFilter}
@@ -446,6 +669,9 @@ function App() {
               await api.reorderPinned(ids);
               await reload();
             }}
+            registerReorder={(fn) => {
+              reorderRef.current = fn;
+            }}
             selectedIds={selectedIds}
             onBulkClick={onCardBulkClick}
             selectModifier={selectModifier}
@@ -463,6 +689,32 @@ function App() {
           />
         </div>
       </main>
+
+        {/* anteprima della clip trascinata, centrata sul cursore */}
+        <DragOverlay modifiers={[snapCenterToCursor]} dropAnimation={null}>
+          {draggingClip ? (
+            <DragPreview clip={draggingClip} stackCount={dragStackCount} />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* fantasma che "cade dentro" il tag al drop: parte dal punto di rilascio
+          e converge verso il centro del tag rimpicciolendosi */}
+      {flying && (
+        <div
+          className="anim-fly-to-tag pointer-events-none fixed z-[60]"
+          style={
+            {
+              left: flying.x,
+              top: flying.y,
+              "--fly-dx": `${flying.dx}px`,
+              "--fly-dy": `${flying.dy}px`,
+            } as React.CSSProperties
+          }
+        >
+          <DragPreview clip={flying.clip} stackCount={flying.count} />
+        </div>
+      )}
 
       <Settings
         open={settingsOpen}

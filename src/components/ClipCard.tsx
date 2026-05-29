@@ -404,12 +404,17 @@ export function ClipCard({
         </div>
       ) : isImage ? (
         thumbUrl ? (
-          <img
-            src={thumbUrl}
-            alt={clip.preview}
-            draggable={false}
-            className="max-h-40 w-auto rounded border border-zinc-700 object-contain"
-          />
+          // altezza massima fissa con ritaglio dall'alto: immagini molto alte
+          // (es. screenshot lunghi) non invadono la lista — l'intera immagine
+          // resta visibile aprendo il preview. object-cover evita le "strisce".
+          <div className="max-h-[190px] w-fit max-w-full overflow-hidden rounded border border-zinc-700">
+            <img
+              src={thumbUrl}
+              alt={clip.preview}
+              draggable={false}
+              className="max-h-[190px] w-auto object-cover object-top"
+            />
+          </div>
         ) : (
           <div className="flex h-24 items-center justify-center rounded border border-dashed border-zinc-700 text-xs text-zinc-500">
             {clip.preview}
@@ -475,7 +480,7 @@ export function ClipCard({
           {clip.tags.map((t) => (
             <span
               key={t}
-              className="anim-scale-in inline-flex max-w-[12rem] items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
+              className="anim-pop inline-flex max-w-[12rem] items-center gap-1 rounded bg-zinc-700/50 px-1.5 py-0.5 text-[11px] text-zinc-300"
             >
               <input
                 type="color"

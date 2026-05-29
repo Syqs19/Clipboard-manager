@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { ClipboardList } from "lucide-react";
-import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
@@ -75,6 +68,30 @@ function SortableCard({
   );
 }
 
+/// Wrapper draggable per le card non pinnate (usa dnd-kit/core).
+/// Serve solo a trascinare la clip su un tag della sidebar; come per le
+/// pinnate il drag parte dopo 8px, così un click breve resta un click.
+function DraggableCard({
+  id,
+  children,
+}: {
+  id: number;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      className="cursor-grab active:cursor-grabbing select-none"
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ClipList({
   clips,
   selectedIndex,
@@ -90,6 +107,7 @@ export function ClipList({
   onRemoveTag,
   onSetTagColor,
   onReorderPinned,
+  registerReorder,
   selectedIds,
   onBulkClick,
   selectModifier,
@@ -117,6 +135,9 @@ export function ClipList({
   onRemoveTag: (id: number, name: string) => void;
   onSetTagColor: (name: string, color: string) => void;
   onReorderPinned: (ids: number[]) => void;
+  /// Espone al parent (App) l'handler di riordino pinnati: lo stato ottimistico
+  /// resta qui dentro, mentre il DndContext vive in App.
+  registerReorder: (fn: (activeId: number, overId: number) => void) => void;
   selectedIds: Set<number>;
   onBulkClick: (clipIndex: number, e: React.MouseEvent) => void;
   selectModifier: SelectModifier;
@@ -181,20 +202,19 @@ export function ClipList({
   // in ricerca (flat) niente riordino dei pinnati: si tiene l'ordine per pertinenza
   const orderedClips = grouped ? reordered : clips;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = pinnedIds.indexOf(active.id as number);
-    const newIndex = pinnedIds.indexOf(over.id as number);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(pinnedIds, oldIndex, newIndex);
-    setOptimisticPinnedIds(next);
-    onReorderPinned(next);
-  };
+  // Registra l'handler di riordino verso App: il DndContext è in App ma il
+  // calcolo (arrayMove + stato ottimistico) resta qui. Rieseguo quando cambia
+  // pinnedIds così la closure cattura sempre l'ordine corrente.
+  useEffect(() => {
+    registerReorder((activeId, overId) => {
+      const oldIndex = pinnedIds.indexOf(activeId);
+      const newIndex = pinnedIds.indexOf(overId);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const next = arrayMove(pinnedIds, oldIndex, newIndex);
+      setOptimisticPinnedIds(next);
+      onReorderPinned(next);
+    });
+  }, [pinnedIds, registerReorder, onReorderPinned]);
 
   if (clips.length === 0) {
     return (
@@ -209,13 +229,8 @@ export function ClipList({
   let lastBucket = "";
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={pinnedIds} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2.5">
+    <SortableContext items={pinnedIds} strategy={verticalListSortingStrategy}>
+      <div className="flex flex-col gap-2.5">
           {orderedClips.map((clip, i) => {
             const bucket = bucketOf(clip, now);
             const showHeader = grouped && bucket !== lastBucket;
@@ -273,13 +288,12 @@ export function ClipList({
                 {clip.pinned && grouped ? (
                   <SortableCard id={clip.id}>{card}</SortableCard>
                 ) : (
-                  card
+                  <DraggableCard id={clip.id}>{card}</DraggableCard>
                 )}
               </div>
             );
           })}
-        </div>
-      </SortableContext>
-    </DndContext>
+      </div>
+    </SortableContext>
   );
 }
