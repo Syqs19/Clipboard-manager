@@ -20,7 +20,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { type Clip, type SelectModifier } from "../lib/api";
+import { type Clip, type SelectModifier, type Tag } from "../lib/api";
 import { TagPicker } from "./TagPicker";
 import { TransformPicker } from "./TransformPicker";
 import { CodeBlock } from "./CodeBlock";
@@ -112,7 +112,7 @@ export function ClipCard({
   onPopoverOpenChange?: (open: boolean) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
-  allTags: [string, number, string | null, boolean][];
+  allTags: Tag[];
   highlightQuery?: string;
 }) {
   const [revealed, setRevealed] = useState(false);

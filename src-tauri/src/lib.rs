@@ -3,6 +3,7 @@ mod clipboard_watcher;
 mod commands;
 mod crypto;
 mod db;
+mod error;
 mod images;
 mod ocr;
 mod settings;
@@ -39,7 +40,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             // "chiudi nel tray" configurabile: se attivo la X nasconde, altrimenti esce
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let state = window.app_handle().state::<settings::RuntimeState>();
+                let state = window.app_handle().state::<Arc<settings::RuntimeState>>();
                 if state.close_to_tray.load(Ordering::Relaxed) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -162,7 +163,11 @@ pub fn run() {
                 .unwrap_or(0)
                 .max(0);
 
-            let runtime = settings::RuntimeState {
+            // RuntimeState in un Arc condiviso: lo stesso oggetto è gestito da
+            // Tauri (per i comandi apply_* e on_window_event) e passato al
+            // watcher / sweep / backfill. Un cambio dalle Impostazioni si vede
+            // ovunque senza dover ripassare i singoli atomici.
+            let runtime = Arc::new(settings::RuntimeState {
                 paused: Arc::new(AtomicBool::new(false)),
                 max_history: Arc::new(AtomicI64::new(max_history)),
                 close_to_tray: Arc::new(AtomicBool::new(close_to_tray)),
@@ -171,16 +176,10 @@ pub fn run() {
                 sensitive_kinds: Arc::new(RwLock::new(sensitive_kinds_set)),
                 ocr_enabled: Arc::new(AtomicBool::new(ocr_enabled_val)),
                 max_image_bytes: Arc::new(AtomicI64::new(max_image_bytes_val)),
-            };
-            let paused = runtime.paused.clone();
-            let max_hist = runtime.max_history.clone();
-            let dont_save = runtime.dont_save_sensitive.clone();
-            let ttl = runtime.sensitive_ttl_minutes.clone();
-            let kinds_for_watcher = runtime.sensitive_kinds.clone();
-            let kinds_for_sweep = runtime.sensitive_kinds.clone();
-            let ocr_for_watcher = runtime.ocr_enabled.clone();
-            let ocr_for_backfill = runtime.ocr_enabled.clone();
-            let max_image_bytes = runtime.max_image_bytes.clone();
+            });
+            let runtime_for_watcher = runtime.clone();
+            let runtime_for_sweep = runtime.clone();
+            let runtime_for_backfill = runtime.clone();
 
             // segnale "self-write": condiviso fra commands (writer) e watcher
             // (consumer) per evitare l'auto-bump quando l'app copia una clip.
@@ -238,12 +237,7 @@ pub fn run() {
                 database.clone(),
                 master_key.clone(),
                 last_self_write,
-                paused,
-                max_hist,
-                dont_save,
-                kinds_for_watcher,
-                ocr_for_watcher,
-                max_image_bytes,
+                runtime_for_watcher,
                 images_dir,
             );
 
@@ -253,11 +247,11 @@ pub fn run() {
                 let app_sweep = app.handle().clone();
                 std::thread::spawn(move || loop {
                     std::thread::sleep(std::time::Duration::from_secs(60));
-                    let mins = ttl.load(Ordering::Relaxed);
+                    let mins = runtime_for_sweep.sensitive_ttl_minutes.load(Ordering::Relaxed);
                     if mins <= 0 {
                         continue;
                     }
-                    let kinds: Vec<String> = match kinds_for_sweep.read() {
+                    let kinds: Vec<String> = match runtime_for_sweep.sensitive_kinds.read() {
                         Ok(s) => s.iter().cloned().collect(),
                         Err(_) => continue,
                     };
@@ -283,7 +277,7 @@ pub fn run() {
                 let key_ocr = master_key.clone();
                 let app_ocr = app.handle().clone();
                 std::thread::spawn(move || {
-                    if !ocr_for_backfill.load(Ordering::Relaxed) {
+                    if !runtime_for_backfill.ocr_enabled.load(Ordering::Relaxed) {
                         return;
                     }
                     ocr::init_thread();
@@ -293,7 +287,7 @@ pub fn run() {
                     };
                     let mut changed = false;
                     for (id, path) in pending {
-                        if !ocr_for_backfill.load(Ordering::Relaxed) {
+                        if !runtime_for_backfill.ocr_enabled.load(Ordering::Relaxed) {
                             break;
                         }
                         let Ok((w, h, rgba)) =

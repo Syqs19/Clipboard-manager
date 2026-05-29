@@ -7,26 +7,23 @@
 
 use crate::crypto::MasterKey;
 use crate::db::{self, Db, NewClip};
-use crate::settings::LastSelfWrite;
+use crate::settings::{LastSelfWrite, RuntimeState};
 use crate::{categorizer, images, win_clipboard};
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
-use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 struct Handler {
     app: AppHandle,
     db: Arc<Db>,
     key: Arc<MasterKey>,
-    paused: Arc<AtomicBool>,
-    max_history: Arc<AtomicI64>,
-    dont_save_sensitive: Arc<AtomicBool>,
-    sensitive_kinds: Arc<RwLock<HashSet<String>>>,
-    ocr_enabled: Arc<AtomicBool>,
-    max_image_bytes: Arc<AtomicI64>,
+    /// Stato runtime condiviso (pausa, limiti, kind sensibili, OCR…): è lo
+    /// stesso `Arc` gestito da Tauri, quindi i cambi dalle Impostazioni si
+    /// vedono subito qui senza dover ripassare i singoli atomici.
+    runtime: Arc<RuntimeState>,
     images_dir: PathBuf,
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
@@ -39,7 +36,7 @@ struct Handler {
 
 impl ClipboardHandler for Handler {
     fn on_clipboard_change(&mut self) -> CallbackResult {
-        if self.paused.load(Ordering::Relaxed) {
+        if self.runtime.paused.load(Ordering::Relaxed) {
             return CallbackResult::Next;
         }
         if let Err(e) = self.capture() {
@@ -125,7 +122,7 @@ impl Handler {
             content: Some(json),
             content_html: None,
             content_rtf: None,
-            content_type: "files".into(),
+            content_type: db::ContentType::Files,
             image_path: None,
             preview,
             created_at: db::now_millis(),
@@ -157,13 +154,14 @@ impl Handler {
         let kind_active = cat
             .sensitive_kind
             .map(|k| {
-                self.sensitive_kinds
+                self.runtime
+                    .sensitive_kinds
                     .read()
                     .map(|s| s.contains(k))
                     .unwrap_or(false)
             })
             .unwrap_or(false);
-        if kind_active && self.dont_save_sensitive.load(Ordering::Relaxed) {
+        if kind_active && self.runtime.dont_save_sensitive.load(Ordering::Relaxed) {
             // se quel contenuto era già in cronologia, rimuovilo (le pinnate restano)
             if let Ok(n) = self.db.delete_by_hash_if_unpinned(&hash) {
                 if n > 0 {
@@ -186,7 +184,7 @@ impl Handler {
             content: Some(text.clone()),
             content_html: html,
             content_rtf: rtf,
-            content_type: cat.content_type.to_string(),
+            content_type: cat.content_type,
             image_path: None,
             preview,
             created_at: db::now_millis(),
@@ -222,7 +220,7 @@ impl Handler {
                 img.height as u32,
                 &img.bytes,
             )?;
-            let limit = self.max_image_bytes.load(Ordering::Relaxed);
+            let limit = self.runtime.max_image_bytes.load(Ordering::Relaxed);
             if limit > 0 && png.len() as i64 > limit {
                 return Ok(());
             }
@@ -237,7 +235,7 @@ impl Handler {
             content: None,
             content_html: None,
             content_rtf: None,
-            content_type: "image".into(),
+            content_type: db::ContentType::Image,
             image_path: Some(path.to_string_lossy().to_string()),
             preview: format!("Image {}×{}", img.width, img.height),
             created_at: db::now_millis(),
@@ -251,7 +249,7 @@ impl Handler {
 
         // OCR in background (non blocca il watcher): rende cercabile il testo
         // dentro lo screenshot. Gira su un thread dedicato col COM inizializzato.
-        if self.ocr_enabled.load(Ordering::Relaxed) {
+        if self.runtime.ocr_enabled.load(Ordering::Relaxed) {
             let db = self.db.clone();
             let app = self.app.clone();
             let w = img.width as u32;
@@ -274,9 +272,48 @@ impl Handler {
 
     /// Pota la cronologia e notifica il frontend (con l'id appena aggiunto/risalito).
     fn finish(&self, id: i64) {
-        let _ = self.db.prune_to_limit(self.max_history.load(Ordering::Relaxed));
+        let _ = self.db.prune_to_limit(self.runtime.max_history.load(Ordering::Relaxed));
         let _ = self.app.emit("clips-changed", id);
     }
+}
+
+/// Avvia il monitoraggio su un thread dedicato. Lo stato regolabile dalle
+/// Impostazioni arriva tutto insieme via `runtime` (Arc condiviso con Tauri).
+pub fn start(
+    app: AppHandle,
+    db: Arc<Db>,
+    key: Arc<MasterKey>,
+    last_self_write: LastSelfWrite,
+    runtime: Arc<RuntimeState>,
+    images_dir: PathBuf,
+) {
+    std::thread::spawn(move || {
+        let clipboard = match arboard::Clipboard::new() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[watcher] impossibile aprire la clipboard: {e}");
+                return;
+            }
+        };
+        let handler = Handler {
+            app,
+            db,
+            key,
+            runtime,
+            images_dir,
+            clipboard,
+            last_hash: None,
+            last_self_write,
+        };
+        match Master::new(handler) {
+            Ok(mut master) => {
+                if let Err(e) = master.run() {
+                    eprintln!("[watcher] master terminato con errore: {e}");
+                }
+            }
+            Err(e) => eprintln!("[watcher] impossibile creare il master: {e}"),
+        }
+    });
 }
 
 #[cfg(test)]
@@ -312,50 +349,3 @@ mod tests {
     }
 }
 
-/// Avvia il monitoraggio su un thread dedicato.
-pub fn start(
-    app: AppHandle,
-    db: Arc<Db>,
-    key: Arc<MasterKey>,
-    last_self_write: LastSelfWrite,
-    paused: Arc<AtomicBool>,
-    max_history: Arc<AtomicI64>,
-    dont_save_sensitive: Arc<AtomicBool>,
-    sensitive_kinds: Arc<RwLock<HashSet<String>>>,
-    ocr_enabled: Arc<AtomicBool>,
-    max_image_bytes: Arc<AtomicI64>,
-    images_dir: PathBuf,
-) {
-    std::thread::spawn(move || {
-        let clipboard = match arboard::Clipboard::new() {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("[watcher] impossibile aprire la clipboard: {e}");
-                return;
-            }
-        };
-        let handler = Handler {
-            app,
-            db,
-            key,
-            paused,
-            max_history,
-            dont_save_sensitive,
-            sensitive_kinds,
-            ocr_enabled,
-            max_image_bytes,
-            images_dir,
-            clipboard,
-            last_hash: None,
-            last_self_write,
-        };
-        match Master::new(handler) {
-            Ok(mut master) => {
-                if let Err(e) = master.run() {
-                    eprintln!("[watcher] master terminato con errore: {e}");
-                }
-            }
-            Err(e) => eprintln!("[watcher] impossibile creare il master: {e}"),
-        }
-    });
-}

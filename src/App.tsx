@@ -20,7 +20,9 @@ import {
   onOpenSettings,
   SELECT_MODIFIERS,
   type Clip,
+  type ContentType,
   type SelectModifier,
+  type Tag,
 } from "./lib/api";
 import { Store } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -173,7 +175,7 @@ function fileLabel(content: string | null): string {
 function App() {
   const notify = useNotify();
   const [clips, setClips] = useState<Clip[]>([]);
-  const [tags, setTags] = useState<[string, number, string | null, boolean][]>(
+  const [tags, setTags] = useState<Tag[]>(
     [],
   );
   const [query, setQuery] = useState("");
@@ -361,7 +363,7 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const isTextLike = (t: string) => t === "text" || t === "url";
+  const isTextLike = (t: ContentType) => t === "text" || t === "url";
   // tipo "effettivo" di un clip: per i gruppi è il tipo dei loro elementi, così
   // un gruppo di immagini appare anche in "Images", uno di testi in "Text", ecc.
   const effectiveType = (c: Clip) =>
@@ -576,7 +578,7 @@ function App() {
 
   // colore di un tag: override salvato oppure deterministico dal nome
   const colorOf = (name: string) =>
-    tagColor(name, tags.find((t) => t[0] === name)?.[2] ?? null);
+    tagColor(name, tags.find((t) => t.name === name)?.color ?? null);
 
   // --- Drag & drop (unico DndContext per Sidebar + lista) ---
   // Il drag parte dopo 8px così un click breve resta un click (copia/selezione).

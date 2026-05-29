@@ -111,11 +111,28 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 
 - ✅ **Tags as a category** — tags now behave exactly like the `Groups` category instead of an always-visible flat list. New `MainKind: "tags"` container row (always present when ≥1 tag exists, hidden otherwise): selecting it filters the list to all tagged clips and expands the individual tags below; choosing another category collapses them again. Three-level hierarchy with a single vertical ActiveBar anchored to "Tags": the tag rows (`Code`, `Color`, …) are sub-entries with an L-guide (sized like the categories' "Pinned"), and each selected tag's own "Pinned" is a third-level sub-sub-entry (more indented/smaller, with its own L-guide). Tag rows keep all their functions (always-left color swatch, star to pin the tag, double-click rename, drag-to-tag drop). Removed the separate `TagActiveBar` — the nav's `ActiveBar` now drives the tag highlight too (`filter.name` added to its deps). Sort A-Z / by count moved into the "Tags" header.
 
+### Done (2026-05-30) — codebase audit & refactor
+
+Multi-agent audit (security / efficiency / code quality) followed by a sequence of behaviour-preserving refactors. Goal: make the codebase scalable so small changes stay small. Verified at every step with `cargo test` (83 passing) + `npx tsc --noEmit`. Audit report kept locally in `AUDIT.md` (gitignored).
+
+- ✅ **Security: import path-traversal fixed** — a malicious export file with an `image_filename` like `..\..\Windows\x.png` could write outside `images/`. New `safe_image_filename` keeps only the final file name; 4 unit tests. (Crypto/SQL-injection/FFI all audited clean.)
+- ✅ **Performance: N+1 tags eliminated** — `Db::collect` loaded tags with one query *per clip* (up to 5000 on every `clips-changed`). Now a single batched query grouped in memory (`tags_for_clips`). 10–50× faster at full history.
+- ✅ **Performance: SQLite PRAGMAs** — `synchronous=NORMAL` (WAL-recommended, fewer fsyncs), `cache_size=-8000`, `temp_store=MEMORY`.
+- ✅ **Clippy cleanup** — 17 → a handful of warnings (the rest auto-fixed or fixed by hand; the dead `write_text_with_html` annotated, not deleted).
+- ✅ **Strong types: `ContentType` enum** — replaced the bare `"text"`/`"image"`/`"group"` strings (~19 sites) with a Rust enum (serde lowercase + `FromSql`/`ToSql`, so SQLite/JSON are unchanged) and a TS union. Adding a kind now fails compilation at every `match`/`switch` to update.
+- ✅ **Strong types: `TagInfo`/`Tag`** — replaced the anonymous tuple `(String,i64,Option<String>,bool)` / `[string,number,string|null,boolean]` (8 frontend sites) with named structs.
+- ✅ **Shared `Arc<RuntimeState>`** — the watcher's `start(...)` went from 11 loose params to taking the single shared state; `lib.rs` no longer clones 8 atomics by hand. Adding a setting no longer touches the watcher signature.
+- ✅ **Split `commands.rs`** (~980 lines) into `commands/clipboard/{clips,tags,io}` + `commands/system/{settings,shell,stats}`, re-exported via `pub use` (so `lib.rs`'s `invoke_handler!` is untouched). Ready to add `tools/`/`design/` sections.
+- ✅ **Split `db.rs`** (1583 lines) into `db/{mod,clips,tags,groups,tests}` — multiple `impl Db` on one struct, shared helpers `pub(crate)` in `mod.rs`.
+- ✅ **Typed errors: `AppError`** (`thiserror`) — all commands return `AppResult<T>`; `#[from]` for rusqlite/io/serde_json/base64, `From<String>` for domain messages, `impl Serialize` so the frontend still gets a plain error string. Removed the ~50 repeated `.map_err(|e| e.to_string())`.
+
 ### Next candidates (not yet done)
+- **`App.tsx` refactor** — still an ~885-line god component; extract custom hooks (`useClips`, `useKeyboardNav`, `useBulkSelection`, `useClipDnd`, `useClipActions`). Most invasive frontend change; ideally add Vitest first as a safety net (no frontend tests yet).
+- **Quality tooling** — no ESLint, no frontend test runner (Vitest), no CI quality-gate (CI runs only on `v*` release tags; the 83 tests never run on push/PR).
+- **List virtualization** — `@tanstack/react-virtual` (approved); with 5000-clip default the whole list is in the DOM and every image invokes the backend even off-screen. The biggest remaining runtime win; pairs with frontend memoization.
 - **Tools section content** — first real tool (likely the Port Killer: list listening TCP ports + kill by PID via system APIs).
 - **Design section content** — Pixel Perfect overlay (on-screen ruler + magnifier color picker), local palette.
 - **Dev project launcher** — reads a local config and opens VS Code + terminal + browser on the dev port via system APIs. Section not decided yet (Tools, or a dedicated one).
-- **List virtualization** — deferred: history default is now 5000, but we ship without virtualization first; add it only if large histories actually lag (would need to coexist with date groups, drag-to-tag, animations).
 - **Multi-copy in group detail** — select several items and copy them together; deferred because the Windows clipboard only holds one image.
 - **prune_to_limit PNG cleanup** — pruned group PNGs are only removed by the startup orphan sweep, not immediately. Minor (temporary disk only).
 - Code signing (paid certificate → removes SmartScreen warning on install)

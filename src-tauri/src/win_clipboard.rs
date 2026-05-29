@@ -57,7 +57,7 @@ pub fn should_skip() -> bool {
         // (Microsoft: il flag è "puoi storicizzare?", non "è privato")
         let mut skip = has_exclude;
         if !skip && has_can_history {
-            let h = GetClipboardData(cf_can_history) as *mut core::ffi::c_void;
+            let h = GetClipboardData(cf_can_history);
             if !h.is_null() {
                 let p = GlobalLock(h) as *const u32;
                 if !p.is_null() {
@@ -267,7 +267,11 @@ pub fn read_html() -> Option<String> {
 
 /// Scrive contemporaneamente CF_UNICODETEXT (plain) e CF_HTML (formattato) nella
 /// clipboard. Ritorna true se entrambi i formati sono stati impostati.
+///
+/// NOTA: non più usata — superata da `write_rich_clipboard`, che gestisce anche
+/// l'RTF oltre all'HTML. Conservata come riferimento; valutarne la rimozione.
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn write_text_with_html(plain: &str, html: &str) -> bool {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -378,6 +382,7 @@ fn build_cf_html_payload(fragment: &str) -> Vec<u8> {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub fn write_text_with_html(_plain: &str, _html: &str) -> bool {
     false
 }

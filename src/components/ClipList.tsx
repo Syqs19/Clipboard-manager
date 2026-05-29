@@ -8,7 +8,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { type Clip, type SelectModifier } from "../lib/api";
+import { type Clip, type SelectModifier, type Tag } from "../lib/api";
 import { ClipCard } from "./ClipCard";
 
 /// Etichetta del gruppo a cui appartiene una clip in base a pin/data.
@@ -157,7 +157,7 @@ export function ClipList({
   onBulkClick: (clipIndex: number, e: React.MouseEvent) => void;
   selectModifier: SelectModifier;
   selectionMode: boolean;
-  allTags: [string, number, string | null, boolean][];
+  allTags: Tag[];
   onReveal: (path: string) => void;
   onCopyImageAsFile: (id: number) => void;
   onQuickOpen: (clip: Clip) => void;

@@ -74,8 +74,8 @@ const MASK_CHARS: &[char] = &['*', '•', '●', '·', '∙', '◦', '‣', '▪
 /// Risultato della categorizzazione.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Category {
-    /// "text" oppure "url".
-    pub content_type: &'static str,
+    /// `Text` oppure `Url` (le immagini/file non passano da qui).
+    pub content_type: crate::db::ContentType,
     /// Tag suggerito, mostrato all'utente (modificabile).
     pub tag: &'static str,
     /// Se true, la UI maschera il contenuto (ma resta copiabile/rivelabile).
@@ -91,7 +91,11 @@ pub fn categorize(content: &str) -> Category {
     let trimmed = content.trim_start_matches('\u{feff}').trim();
     let (content_type, tag) = classify(trimmed, content);
     // gli URL non si mascherano; per il resto applica le regole sui dati sensibili
-    let sensitive_kind = if content_type != "url" { detect_sensitive_kind(trimmed) } else { None };
+    let sensitive_kind = if content_type != crate::db::ContentType::Url {
+        detect_sensitive_kind(trimmed)
+    } else {
+        None
+    };
     Category {
         content_type,
         tag,
@@ -102,26 +106,27 @@ pub fn categorize(content: &str) -> Category {
 
 /// Determina (content_type, tag). Ordine dal più specifico al generico, così un
 /// IBAN non diventa "Codice" e uno snippet lungo resta "Codice" non "Testo lungo".
-fn classify(trimmed: &str, original: &str) -> (&'static str, &'static str) {
+fn classify(trimmed: &str, original: &str) -> (crate::db::ContentType, &'static str) {
+    use crate::db::ContentType;
     if URL_RE.is_match(trimmed) {
-        return ("url", "Link");
+        return (ContentType::Url, "Link");
     }
     if EMAIL_RE.is_match(trimmed) {
-        return ("text", "Email");
+        return (ContentType::Text, "Email");
     }
     if COLOR_RE.is_match(trimmed) {
-        return ("text", "Color");
+        return (ContentType::Text, "Color");
     }
     if is_numeric_like(trimmed) {
-        return ("text", "Numbers");
+        return (ContentType::Text, "Numbers");
     }
     if looks_like_code(trimmed) {
-        return ("text", "Code");
+        return (ContentType::Text, "Code");
     }
     if original.chars().count() > LONG_TEXT_THRESHOLD {
-        return ("text", "Long text");
+        return (ContentType::Text, "Long text");
     }
-    ("text", "Text")
+    (ContentType::Text, "Text")
 }
 
 /// Restituisce il sottotipo del sensibile, se presente. Ordine dal più specifico
@@ -245,7 +250,7 @@ mod tests {
     #[test]
     fn url() {
         assert_eq!(categorize("https://example.com/path?q=1").tag, "Link");
-        assert_eq!(categorize("  http://a.b  ").content_type, "url");
+        assert_eq!(categorize("  http://a.b  ").content_type, crate::db::ContentType::Url);
         assert!(!categorize("https://example.com/very/long/path/12345").sensitive); // url mai mascherato
         assert_ne!(categorize("vai su https://x.com adesso").tag, "Link");
     }
@@ -389,7 +394,7 @@ mod tests {
     #[test]
     fn url_with_port_and_query() {
         let c = categorize("https://example.com:8443/path?q=1&x=2");
-        assert_eq!(c.content_type, "url");
+        assert_eq!(c.content_type, crate::db::ContentType::Url);
         assert!(!c.sensitive);
     }
 

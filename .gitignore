@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Audit locale (non committare)
+AUDIT.md
+.claude
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

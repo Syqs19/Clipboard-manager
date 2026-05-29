@@ -1,11 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+/// Tipo di una clip o di un elemento di gruppo. Specchio di `db::ContentType`
+/// lato Rust (serializzato in minuscolo). Tenere allineato con l'enum Rust.
+export type ContentType = "text" | "url" | "image" | "files" | "group";
+
+/// Un tag con i suoi metadati. Specchio di `db::TagInfo` lato Rust. Sostituisce
+/// la vecchia tupla anonima `[string, number, string | null, boolean]`.
+export interface Tag {
+  name: string;
+  count: number;
+  color: string | null;
+  pinned: boolean;
+}
+
 /// Un elemento di una clip-gruppo (specchio di `db::ClipItem`).
 export interface ClipItem {
   id: number;
   position: number;
-  item_type: string; // 'text' | 'image' | 'url' | 'files'
+  item_type: ContentType;
   content: string | null;
   image_path: string | null;
   thumb_path: string | null;
@@ -19,7 +32,7 @@ export interface Clip {
   content: string | null;
   content_html: string | null;
   content_rtf: string | null;
-  content_type: string; // 'text' | 'image' | 'url' | 'files' | 'group'
+  content_type: ContentType;
   image_path: string | null;
   thumb_path: string | null;
   preview: string;
@@ -55,8 +68,7 @@ export const api = {
   bulkAddTag: (ids: number[], name: string) =>
     invoke<void>("bulk_add_tag", { ids, name }),
   clearHistory: () => invoke<void>("clear_history"),
-  listTags: () =>
-    invoke<[string, number, string | null, boolean][]>("list_tags"),
+  listTags: () => invoke<Tag[]>("list_tags"),
   setTagPinned: (name: string, pinned: boolean) =>
     invoke<void>("set_tag_pinned", { name, pinned }),
   renameTag: (old: string, newName: string) =>

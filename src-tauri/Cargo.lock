@@ -582,6 +582,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-store",
  "tauri-plugin-updater",
+ "thiserror 2.0.18",
  "windows",
  "windows-sys 0.59.0",
 ]

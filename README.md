@@ -87,22 +87,21 @@ The app checks for updates automatically on launch. When a new version is availa
 
 ### Architecture
 
+The Rust backend is organized **by domain**, in modules rather than a few giant files.
+
 Backend (`src-tauri/src/`):
-- `lib.rs` — Tauri builder: opens DB, registers hotkey, builds tray, starts watcher, handles close-to-tray.
+- `lib.rs` — Tauri builder: opens DB, loads settings into a shared `Arc<RuntimeState>`, registers hotkey, builds tray, starts watcher and background sweeps, runs the `invoke_handler!` registry.
 - `clipboard_watcher.rs` — background thread; captures text/URLs/images/files/HTML/RTF, dedup, prune, emits `clips-changed`.
-- `categorizer.rs` — classifies text → tag (Link/Email/Numbers/Code/...) + sensitive flag.
-- `db.rs` — SQLCipher (WAL); `clips`/`tags`/`clip_tags` tables; dedup by FNV-1a hash.
-- `crypto.rs` — master key (DPAPI) + AES-GCM for PNGs.
-- `commands.rs` — Tauri commands invoked from the frontend (list/search/copy/pin/...).
-- `settings.rs` — shared runtime state.
-- `tray.rs` — tray icon + menu.
-- `images.rs` — encrypted PNG encode/decode + thumbnails.
-- `win_clipboard.rs` — WinAPI for CF_HDROP, CF_HTML, CF_RTF and exclusion formats.
+- `categorizer.rs` — classifies text → `ContentType` + UI tag (Link/Email/Numbers/Code/…) + sensitive kind.
+- `db/` — SQLCipher (WAL), split by domain (`mod.rs` for schema/migrations/types + shared helpers, then `clips.rs` / `tags.rs` / `groups.rs` / `tests.rs`). `clips`/`tags`/`clip_tags`/`clip_items` tables; dedup by FNV-1a hash. The `ContentType` enum lives here.
+- `commands/` — Tauri commands, grouped by macro-section: `clipboard/{clips,tags,io}` and `system/{settings,shell,stats}`. Re-exported via `pub use` so `lib.rs` keeps using `commands::<name>`.
+- `error.rs` — `AppError` (`thiserror`): every command returns `AppResult<T>`; serialized to a plain error string for the frontend.
+- `crypto.rs` — master key (DPAPI) + AES-GCM for PNGs. `settings.rs` — `RuntimeState`. `images.rs` — encrypted PNG encode/decode + thumbnails. `ocr.rs` — Windows WinRT OCR (offline). `transforms.rs` — "Paste as" transforms. `win_clipboard.rs` — WinAPI for CF_HDROP/CF_HTML/CF_RTF + exclusion formats. `tray.rs` — tray icon + menu.
 
 Frontend (`src/`):
-- `App.tsx` — global state, keyboard navigation, watcher events.
-- `components/` — Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview, TagPicker, Toaster, Onboarding.
-- `lib/` — `api.ts` (invoke + listen wrapper), `format.ts` (masking + tag colors), `useImageUrl.ts` (loading encrypted images via Blob), `useExitAnimation.ts` (hook for exit animations).
+- `App.tsx` — global state, keyboard navigation, drag & drop, watcher events, section router.
+- `components/` — Sidebar, SearchBar, ClipList, ClipCard, GroupDetail, GroupPreview, ImagePreview, SelectionBar, Settings, TagPicker, TransformPicker, CodeBlock, Toaster, Onboarding, UpdateButton.
+- `lib/` — `api.ts` (invoke + listen wrappers, plus the `ContentType` union and `Tag` interface mirroring the Rust types), `format.ts` (masking + tag colors), `useImageUrl.ts` (encrypted images via Blob), `useExitAnimation.ts` (exit animations).
 
 Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (encrypted), `key.bin` (DPAPI), `images/*.png` (encrypted), `settings.json`.
 
@@ -114,9 +113,10 @@ Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (encrypted), 
 
 ## Roadmap
 
-See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the detailed status. Pending:
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the detailed status. Pending highlights:
 
-- Auto-update via `tauri-plugin-updater` + GitHub Actions CI for releases
+- Tools / Design sections (Port Killer, Pixel Perfect, project launcher)
+- List virtualization for very large histories
 - Code signing (removes SmartScreen — needs a paid certificate)
 
 ## License

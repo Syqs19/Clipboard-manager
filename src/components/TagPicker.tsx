@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
+import { type Tag } from "../lib/api";
 
 /// Popover per selezionare un tag esistente o crearne uno nuovo.
-/// `tags` = lista `[name, count, color, pinned]` (stesso formato dello store).
 export function TagPicker({
   tags,
   excluded,
@@ -10,7 +10,7 @@ export function TagPicker({
   onPick,
   onClose,
 }: {
-  tags: [string, number, string | null, boolean][];
+  tags: Tag[];
   excluded?: string[];
   colorOf: (name: string) => string;
   onPick: (name: string) => void;
@@ -33,11 +33,11 @@ export function TagPicker({
   const filtered = useMemo(
     () =>
       tags
-        .filter(([n]) => !exclSet.has(n))
-        .filter(([n]) => !norm || n.toLowerCase().includes(norm)),
+        .filter((t) => !exclSet.has(t.name))
+        .filter((t) => !norm || t.name.toLowerCase().includes(norm)),
     [tags, exclSet, norm],
   );
-  const exactMatch = filtered.some(([n]) => n.toLowerCase() === norm);
+  const exactMatch = filtered.some((t) => t.name.toLowerCase() === norm);
   const canCreate = norm.length > 0 && !exactMatch;
 
   const commit = (name: string) => {
@@ -62,7 +62,7 @@ export function TagPicker({
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              if (filtered[0]) commit(filtered[0][0]);
+              if (filtered[0]) commit(filtered[0].name);
               else if (canCreate) commit(q);
             } else if (e.key === "Escape") {
               e.preventDefault();
@@ -78,7 +78,7 @@ export function TagPicker({
         {filtered.length === 0 && !canCreate && (
           <div className="px-3 py-2 text-xs text-zinc-500">No tags</div>
         )}
-        {filtered.map(([name, count]) => (
+        {filtered.map(({ name, count }) => (
           <button
             key={name}
             onClick={() => commit(name)}

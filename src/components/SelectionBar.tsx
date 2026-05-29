@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pin, PinOff, Tag, Trash2, X } from "lucide-react";
 import { TagPicker } from "./TagPicker";
+import { type Tag as TagInfo } from "../lib/api";
 
 /// Barra di azioni in cima alla lista quando l'utente ha selezionato 1+ clip
 /// con Ctrl/Shift+click. Elimina, pinna/despinna, aggiungi/rimuovi tag, deseleziona.
@@ -20,7 +21,7 @@ export function SelectionBar({
   count: number;
   anyPinned: boolean;
   allPinned: boolean;
-  allTags: [string, number, string | null, boolean][];
+  allTags: TagInfo[];
   selectedTagsInBulk: string[];
   colorOf: (name: string) => string;
   onClear: () => void;
@@ -70,7 +71,7 @@ export function SelectionBar({
             </button>
             {untagging && (
               <TagPicker
-                tags={allTags.filter(([n]) => selectedTagsInBulk.includes(n))}
+                tags={allTags.filter((t) => selectedTagsInBulk.includes(t.name))}
                 colorOf={colorOf}
                 onPick={(name) => onRemoveTag(name)}
                 onClose={() => setUntagging(false)}

@@ -18,6 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { tagColor } from "../lib/format";
+import { type Tag } from "../lib/api";
 
 /// Macro-categorie (sezioni) della sidebar: ognuna ha un header collassabile e
 /// guida cosa mostra l'area principale. "clipboard" è quella storica.
@@ -514,7 +515,7 @@ export function Sidebar({
   onSectionChange: (s: Section | null) => void;
   filter: Filter;
   onSelect: (f: Filter) => void;
-  tags: [string, number, string | null, boolean][];
+  tags: Tag[];
   imageCount: number;
   fileCount: number;
   textCount: number;
@@ -547,18 +548,13 @@ export function Sidebar({
     onSectionChange(s === activeSection ? null : s);
     window.setTimeout(() => setAnimatingCollapse(false), 220);
   };
-  const compare = (
-    a: [string, number, string | null, boolean],
-    b: [string, number, string | null, boolean],
-  ) =>
+  const compare = (a: Tag, b: Tag) =>
     sortBy === "count"
-      ? b[1] - a[1] || a[0].localeCompare(b[0])
-      : a[0].localeCompare(b[0]);
-  const pinnedTags = tags.filter(([, , , p]) => p).sort(compare);
-  const otherTags = tags.filter(([, , , p]) => !p).sort(compare);
-  const renderTag = (
-    [name, count, color, pinned]: [string, number, string | null, boolean],
-  ) => (
+      ? b.count - a.count || a.name.localeCompare(b.name)
+      : a.name.localeCompare(b.name);
+  const pinnedTags = tags.filter((t) => t.pinned).sort(compare);
+  const otherTags = tags.filter((t) => !t.pinned).sort(compare);
+  const renderTag = ({ name, count, color, pinned }: Tag) => (
     <TagRow
       key={name}
       name={name}

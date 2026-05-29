@@ -111,17 +111,33 @@ Repo: https://github.com/Syqs19/Clipboard-manager
 ### Architecture / key files
 
 Backend (`src-tauri/src/`):
-- `lib.rs` — Tauri builder: opens DB, reads settings from store, registers hotkey, builds tray, starts watcher, close-to-tray, commands.
-- `clipboard_watcher.rs` — background thread; on clipboard change captures text/url/image, categorizes, dedups (move-to-top), prunes to limit, emits `clips-changed` (payload = clip id).
-- `categorizer.rs` — classifies text → tag (Link/Email/Numeri/Codice/Testo lungo/Testo) + `sensitive` flag (IBAN/cards/email/long tokens). Has unit tests.
-- `db.rs` — SQLite (WAL); `clips`/`tags`/`clip_tags`; dedup by FNV-1a hash; pin/prune/search/tag ops. Has unit tests.
-- `commands.rs` — Tauri commands invoked from the frontend (list/search/copy/pin/delete/clear/tags/colors/edit/settings).
-- `settings.rs` — `RuntimeState` (paused / max_history / close_to_tray atomics).
-- `tray.rs` — tray icon + menu; `images.rs` — PNG save/load (re-copy images).
+- `lib.rs` — Tauri builder: opens DB, reads settings from store into a shared `Arc<RuntimeState>`, registers hotkey, builds tray, starts watcher, close-to-tray, runs the `invoke_handler!` registry. Settings sweeps (sensitive TTL) and OCR backfill run as background threads that read the same `Arc<RuntimeState>`.
+- `clipboard_watcher.rs` — background thread; on clipboard change captures text/url/image/files, categorizes, dedups (move-to-top), prunes to limit, emits `clips-changed` (payload = clip id). `start(...)` takes the shared `Arc<RuntimeState>` (not loose atomics).
+- `categorizer.rs` — classifies text → `ContentType` (Text/Url) + UI tag (Link/Email/Numbers/Code/Long text/Text) + `sensitive_kind`. Has unit tests.
+- **`db/`** — SQLite (SQLCipher, WAL) split by domain (multiple `impl Db` blocks on one struct):
+  - `db/mod.rs` — schema, migrations, `open/init`, hash fns (`now_millis`/`bytes_hash`/`content_hash`), the structs (`Clip`/`NewClip`/`ClipItem`/`NewClipItem`/`DbStats`/`TagInfo`/`Db`), the **`ContentType` enum** (serde lowercase + `FromSql`/`ToSql`), and `pub(crate)` shared helpers (`collect`, `map_row`, `tags_for_clips`, `items_for_clip_conn`, `SELECT_COLS`).
+  - `db/clips.rs` — insert/dedup, list/search/get, pin/reorder, delete/prune, stats, OCR text, `update_clip_content`.
+  - `db/tags.rs` — get_or_create/attach/detach/rename/color/pin, list (counts/export), `wipe_all`.
+  - `db/groups.rs` — clip-group items (insert/list/get/label) and `merge_clips` (+ private `effective_type`/`clip_as_items`).
+  - `db/tests.rs` — all DB unit tests (in-memory).
+- **`commands/`** — Tauri commands, organized by **macro-section** (mirrors the sidebar; grows with future sections). `commands/mod.rs` holds shared type aliases (`Database`/`Key`/`Runtime` = the managed `Arc`s) + `DEFAULT_LIMIT` and **re-exports every command with `pub use`** so `lib.rs` keeps referring to them as `commands::<name>`:
+  - `commands/clipboard/{clips,tags,io}.rs` — the Clipboard section (clip + group ops, tag ops, history export/import). `io.rs` has the `safe_image_filename` path-traversal guard + its tests.
+  - `commands/system/{settings,shell,stats}.rs` — cross-cutting commands (apply_* settings, reveal/open via Windows shell, stats).
+  - When adding a section like Tools/Design, create `commands/<section>/` next to `clipboard/` — isolated, no impact on the rest.
+- `error.rs` — **`AppError`** (`thiserror` enum) with `#[from]` for rusqlite/io/serde_json/base64 and `From<String>` for domain messages; `impl Serialize` emits the message string so the frontend still receives a plain error text. All commands return `AppResult<T>`; `?` propagates without `.map_err(|e| e.to_string())`.
+- `settings.rs` — `RuntimeState` (paused / max_history / close_to_tray / dont_save_sensitive / sensitive_ttl / sensitive_kinds / ocr_enabled / max_image_bytes); `ALL_SENSITIVE_KINDS`. `crypto.rs` — DPAPI-wrapped master key + AES-256-GCM helpers. `images.rs` — encrypted PNG save/load + thumbnails. `ocr.rs` — Windows WinRT OCR (off-thread). `transforms.rs` — "Paste as" pure transforms. `win_clipboard.rs` — Win32 FFI (CF_HDROP, CF_HTML/RTF, exclusion flags). `tray.rs` — tray icon + menu.
 
-Frontend (`src/`): `App.tsx` (state, keyboard nav, events, `activeSection` router for the sidebar macro-sections), `components/` (Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview), `lib/api.ts` (invoke wrappers + events), `lib/format.ts` (masking + tag colors).
+Frontend (`src/`): `App.tsx` (state, keyboard nav, events, drag&drop, `activeSection` router — **still a large god component, slated for custom-hook extraction**), `components/` (Sidebar, SearchBar, ClipList, ClipCard, GroupDetail, GroupPreview, ImagePreview, SelectionBar, Settings, TagPicker, TransformPicker, CodeBlock, Toaster, Onboarding, UpdateButton), `lib/api.ts` (invoke wrappers + events + the **`ContentType` union** and **`Tag` interface** mirroring the Rust types), `lib/format.ts` (masking + tag colors), `lib/useImageUrl.ts`/`useExitAnimation.ts` (hooks).
 
-Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db`, `settings.json`, `images/*.png`.
+Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (SQLCipher), `key.bin` (DPAPI), `settings.json`, `images/*.png` (encrypted).
+
+### Coding conventions introduced (keep consistent)
+
+- **Type the type, don't stringly-type it.** Clip/item kinds use the `ContentType` enum (Rust) ↔ `ContentType` union (TS), kept aligned by hand. Adding a variant makes the compiler list every `match`/`switch` to update. Don't reintroduce bare `"image"`/`"group"` string comparisons.
+- **Named structs over positional tuples** at the frontend boundary (e.g. `TagInfo`/`Tag`, not `[name, count, color, pinned]`).
+- **Errors via `AppError`** (`AppResult<T>` + `?`), not `Result<_, String>` + `.map_err`.
+- **Shared runtime state** is passed as the single `Arc<RuntimeState>`, not as loose atomics/params.
+- New commands: write them in the right `commands/<section>/` file and they're auto-exported by the `pub use` in `commands/mod.rs` — but still remember to add the line to `invoke_handler!` in `lib.rs` (missing it is a runtime "command not found", not a compile error).
 
 ### Notable behaviors
 
