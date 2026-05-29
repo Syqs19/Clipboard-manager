@@ -21,7 +21,7 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ **Granularity of sensitive categories** — multi-checkbox (email/IBAN/cards/tokens) to decide which types are subject to don't-save and TTL. The UI masking remains always active on all detected sensitive values, regardless of the choice.
 - ✅ **No HTML/RTF for sensitive clips** — if the categorizer marks the text as sensitive, the watcher discards HTML/RTF: markup may leak provenance/context next to the cleartext.
 - ☐ ~~Panic hotkey~~ — dropped for UX (accidental-press risk).
-- ☐ **Optional passphrase** (in addition to DPAPI) — protects against malware running under the same Windows user. Trade-off: must be typed at every launch, no recovery if forgotten.
+- ☐ ~~Optional passphrase~~ — dropped: too high a cost (typed at every launch, no recovery if forgotten) for the benefit on a personal app.
 
 ## ✨ Spec / features completion
 
@@ -95,6 +95,8 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 
 ### Next candidates (not yet done)
 - Code signing (paid certificate → removes SmartScreen warning on install)
-- Optional passphrase as an alternative to DPAPI-only (opt-in, prompts at launch)
-- Drag-out of a clip from the card to an external app (real clipboard-manager feel)
 - Real screenshots in README
+
+### Dropped (cost/benefit on a personal app)
+- ~~Optional passphrase~~ — typed at every launch, no recovery if forgotten.
+- ~~Drag-out of a clip to an external app~~ — needs fragile low-level OLE drag from a webview; unreliable.
