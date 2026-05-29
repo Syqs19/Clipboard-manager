@@ -119,7 +119,7 @@ Backend (`src-tauri/src/`):
 - `settings.rs` — `RuntimeState` (paused / max_history / close_to_tray atomics).
 - `tray.rs` — tray icon + menu; `images.rs` — PNG save/load (re-copy images).
 
-Frontend (`src/`): `App.tsx` (state, keyboard nav, events), `components/` (Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview), `lib/api.ts` (invoke wrappers + events), `lib/format.ts` (masking + tag colors).
+Frontend (`src/`): `App.tsx` (state, keyboard nav, events, `activeSection` router for the sidebar macro-sections), `components/` (Sidebar, SearchBar, ClipList, ClipCard, Settings, ImagePreview), `lib/api.ts` (invoke wrappers + events), `lib/format.ts` (masking + tag colors).
 
 Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db`, `settings.json`, `images/*.png`.
 
@@ -129,7 +129,8 @@ Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db`, `settings.js
 - **Dedup move-to-top**: re-copying existing content bumps it to top, no duplicate.
 - **Hotkey** configurable (default `Ctrl+Shift+V`); **close-to-tray** + **autostart default OFF**.
 - **Images**: captured as PNG, thumbnail in card, click → preview lightbox, dedicated "Immagini" sidebar section.
-- **Tags**: auto + manual; per-tag color via native color picker (sidebar dot and card chips).
+- **Tags**: auto + manual; per-tag color via native color picker (sidebar dot and card chips). In the sidebar tags live under a `Tags` **container category** (like `Groups`): the row is always shown when ≥1 tag exists, selecting it filters to all tagged clips and expands the tag rows below as sub-entries with an L-guide; each selected tag's own `Pinned` is a third-level sub-sub-entry. The single vertical ActiveBar stays anchored to `Tags`.
+- **Sidebar macro-sections**: the sidebar is a stack of collapsible sections (`Clipboard` / `Tools` / `Design`) — accordion (one open at a time, click the open one to close). `App.tsx` holds `activeSection` (`Section | null`) and `<main>` routes on it: clipboard UI when `clipboard`, placeholder otherwise. `Tools`/`Design` are placeholders for upcoming dev tools.
 
 ### Roadmap
 

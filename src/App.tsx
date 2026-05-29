@@ -25,7 +25,7 @@ import {
 import { Store } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { tagColor } from "./lib/format";
-import { Sidebar, type Filter } from "./components/Sidebar";
+import { Sidebar, type Filter, type Section } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
 import { Settings } from "./components/Settings";
@@ -177,6 +177,10 @@ function App() {
     [],
   );
   const [query, setQuery] = useState("");
+  // macro-sezione attiva (Clipboard / Strumenti / Design): guida cosa mostra
+  // l'area principale. `null` = tutte chiuse (main mostra un placeholder).
+  // Il `filter` qui sotto resta interno alla Clipboard.
+  const [activeSection, setActiveSection] = useState<Section | null>("clipboard");
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
@@ -197,6 +201,10 @@ function App() {
   const visibleRef = useRef<Clip[]>([]);
   const selRef = useRef(0);
   const modalRef = useRef(false);
+  // la navigazione da tastiera (↑↓ / Enter / 1-9) vale solo nella Clipboard:
+  // nelle altre sezioni la lista non è visibile.
+  const clipboardActiveRef = useRef(true);
+  clipboardActiveRef.current = activeSection === "clipboard";
   // true mentre un popover "Copy as…" è aperto: sospende la navigazione ↑↓ così
   // le frecce non scorrono la lista dietro al menu.
   const popoverOpenRef = useRef(false);
@@ -306,6 +314,7 @@ function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (modalRef.current || popoverOpenRef.current) return;
+      if (!clipboardActiveRef.current) return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA";
       const list = visibleRef.current;
@@ -373,12 +382,19 @@ function App() {
         return filter.kind === "groups" && filter.groupType
           ? (c.items?.[0]?.item_type ?? "text") === filter.groupType
           : true;
+      case "tags":
+        // categoria-contenitore "Tags": tutte le clip con almeno un tag
+        return c.tags.length > 0;
       case "tag":
         return false; // gestito a parte
     }
   };
   const visible = clips.filter((c) => {
-    if (filter.kind === "tag") return c.tags.includes(filter.name);
+    if (filter.kind === "tag") {
+      if (!c.tags.includes(filter.name)) return false;
+      // sotto-voce "Pinned" del tag: solo le clip fissate con quel tag
+      return filter.pinned ? c.pinned : true;
+    }
     if (!typeMatches(c, filter.kind)) return false;
     // categoria principale: tutto (fissati inclusi, fissati restano in cima
     // grazie all'ordinamento del backend). Sub-voce "Fissati": solo fissati.
@@ -390,6 +406,7 @@ function App() {
   const fileCount = clips.filter((c) => effectiveType(c) === "files").length;
   const textCount = clips.filter((c) => isTextLike(effectiveType(c))).length;
   const groupCount = clips.filter((c) => c.content_type === "group").length;
+  const tagsCount = clips.filter((c) => c.tags.length > 0).length;
   const pinnedAllCount = clips.filter((c) => c.pinned).length;
   const pinnedImageCount = clips.filter(
     (c) => effectiveType(c) === "image" && c.pinned,
@@ -400,6 +417,12 @@ function App() {
   const pinnedTextCount = clips.filter(
     (c) => isTextLike(effectiveType(c)) && c.pinned,
   ).length;
+  // clip fissate per tag (per la sotto-voce "Pinned" di ogni tag)
+  const pinnedByTag = new Map<string, number>();
+  for (const c of clips) {
+    if (!c.pinned) continue;
+    for (const t of c.tags) pinnedByTag.set(t, (pinnedByTag.get(t) ?? 0) + 1);
+  }
 
   // selezione corrente (per la navigazione da tastiera)
   const sel = visible.length ? Math.min(selectedIndex, visible.length - 1) : 0;
@@ -662,6 +685,8 @@ function App() {
         onDragEnd={onDragEnd}
       >
       <Sidebar
+        activeSection={activeSection}
+        onSectionChange={setActiveSection}
         filter={filter}
         onSelect={setFilter}
         tags={tags}
@@ -669,11 +694,13 @@ function App() {
         fileCount={fileCount}
         textCount={textCount}
         groupCount={groupCount}
+        tagsCount={tagsCount}
         totalCount={allCount}
         pinnedAllCount={pinnedAllCount}
         pinnedImageCount={pinnedImageCount}
         pinnedFileCount={pinnedFileCount}
         pinnedTextCount={pinnedTextCount}
+        pinnedByTag={pinnedByTag}
         onSetTagColor={handleSetTagColor}
         onSetTagPinned={handleSetTagPinned}
         onRenameTag={handleRenameTag}
@@ -681,7 +708,9 @@ function App() {
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-zinc-800/60 p-4">
           <div className="flex-1">
-            <SearchBar value={query} onChange={setQuery} />
+            {activeSection === "clipboard" && (
+              <SearchBar value={query} onChange={setQuery} />
+            )}
           </div>
           <button
             onClick={() => setSettingsOpen(true)}
@@ -691,60 +720,75 @@ function App() {
             <SettingsIcon className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          {selectedIds.size > 0 && (
-            <SelectionBar
-              count={selectedIds.size}
-              anyPinned={anyPinned}
-              allPinned={allPinned}
-              allTags={tags}
-              selectedTagsInBulk={selectedTagsInBulk}
+        {activeSection === "clipboard" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {selectedIds.size > 0 && (
+              <SelectionBar
+                count={selectedIds.size}
+                anyPinned={anyPinned}
+                allPinned={allPinned}
+                allTags={tags}
+                selectedTagsInBulk={selectedTagsInBulk}
+                colorOf={colorOf}
+                onClear={clearSelection}
+                onDelete={deleteSelected}
+                onTogglePin={togglePinSelected}
+                onAddTag={addTagSelected}
+                onRemoveTag={removeTagSelected}
+              />
+            )}
+            <ClipList
+              clips={visible}
+              selectedIndex={sel}
+              copiedId={copiedId}
+              onSelect={setSelectedIndex}
               colorOf={colorOf}
-              onClear={clearSelection}
-              onDelete={deleteSelected}
-              onTogglePin={togglePinSelected}
-              onAddTag={addTagSelected}
-              onRemoveTag={removeTagSelected}
+              onCopy={handleCopy}
+              onPreview={setPreviewClip}
+              onTogglePin={handlePin}
+              onDelete={handleDelete}
+              onUpdate={handleUpdate}
+              onAddTag={handleAddTag}
+              onRemoveTag={handleRemoveTag}
+              onSetTagColor={handleSetTagColor}
+              onReorderPinned={async (ids) => {
+                await api.reorderPinned(ids);
+                await reload();
+              }}
+              registerReorder={(fn) => {
+                reorderRef.current = fn;
+              }}
+              selectedIds={selectedIds}
+              onBulkClick={onCardBulkClick}
+              selectModifier={selectModifier}
+              selectionMode={selectedIds.size > 0}
+              allTags={tags}
+              onReveal={handleReveal}
+              onCopyImageAsFile={handleCopyImageAsFile}
+              onQuickOpen={handleQuickOpen}
+              onTransform={handleTransform}
+              onOpenGroup={setGroupClip}
+              onPopoverOpenChange={(open) => {
+                popoverOpenRef.current = open;
+              }}
+              highlightQuery={query}
+              grouped={!query.trim()}
             />
-          )}
-          <ClipList
-            clips={visible}
-            selectedIndex={sel}
-            copiedId={copiedId}
-            onSelect={setSelectedIndex}
-            colorOf={colorOf}
-            onCopy={handleCopy}
-            onPreview={setPreviewClip}
-            onTogglePin={handlePin}
-            onDelete={handleDelete}
-            onUpdate={handleUpdate}
-            onAddTag={handleAddTag}
-            onRemoveTag={handleRemoveTag}
-            onSetTagColor={handleSetTagColor}
-            onReorderPinned={async (ids) => {
-              await api.reorderPinned(ids);
-              await reload();
-            }}
-            registerReorder={(fn) => {
-              reorderRef.current = fn;
-            }}
-            selectedIds={selectedIds}
-            onBulkClick={onCardBulkClick}
-            selectModifier={selectModifier}
-            selectionMode={selectedIds.size > 0}
-            allTags={tags}
-            onReveal={handleReveal}
-            onCopyImageAsFile={handleCopyImageAsFile}
-            onQuickOpen={handleQuickOpen}
-            onTransform={handleTransform}
-            onOpenGroup={setGroupClip}
-            onPopoverOpenChange={(open) => {
-              popoverOpenRef.current = open;
-            }}
-            highlightQuery={query}
-            grouped={!query.trim()}
-          />
-        </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 py-4 text-center">
+            {activeSection ? (
+              <>
+                <p className="text-sm font-medium text-zinc-300">
+                  {activeSection === "tools" ? "Tools" : "Design"}
+                </p>
+                <p className="max-w-xs text-xs text-zinc-500">Coming soon.</p>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">Select a section.</p>
+            )}
+          </div>
+        )}
       </main>
 
         {/* anteprima della clip trascinata, centrata sul cursore */}
