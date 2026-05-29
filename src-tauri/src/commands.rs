@@ -597,6 +597,39 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Apre un file con l'applicazione predefinita di Windows (azione "open" della shell).
+#[tauri::command]
+pub fn open_path(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Path does not exist".into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let file: Vec<u16> = std::ffi::OsStr::new(&path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let op: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+        // ShellExecuteW ritorna un valore > 32 in caso di successo
+        let res = unsafe {
+            windows_sys::Win32::UI::Shell::ShellExecuteW(
+                std::ptr::null_mut(),
+                op.as_ptr(),
+                file.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                1, // SW_SHOWNORMAL
+            )
+        };
+        if (res as isize) <= 32 {
+            return Err("Failed to open the file".into());
+        }
+    }
+    Ok(())
+}
+
 /// Imposta il colore di un tag.
 #[tauri::command]
 pub fn set_tag_color(db: State<Database>, name: String, color: String) -> Result<(), String> {

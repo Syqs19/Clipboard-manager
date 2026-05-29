@@ -349,6 +349,7 @@ pub fn run() {
             commands::rename_tag,
             commands::bulk_remove_tag,
             commands::reveal_in_explorer,
+            commands::open_path,
             commands::read_image_bytes,
             commands::get_stats,
             commands::copy_image_as_file,

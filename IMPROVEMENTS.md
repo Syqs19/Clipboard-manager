@@ -96,6 +96,7 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ "Copy image as file" — puts an image clip on the clipboard as CF_HDROP (decrypted to a cleaned temp dir) so it can be pasted into a folder with Ctrl+V; button on the card and in the preview
 - ✅ Fuzzy search across the whole history (content, preview, tags, OCR text), typo-tolerant and ranked
 - ✅ OCR on images via Windows.Media.Ocr (no external deps, offline) — search works inside screenshots; background OCR on capture + startup backfill; toggle in Settings → Security (on by default)
+- ✅ Quick actions on clips: open links in the browser, open files with the default app (`open_path` via ShellExecuteW). Email/mailto dropped (depends on an unpredictable OS default handler)
 
 ### Next candidates (not yet done)
 - Code signing (paid certificate → removes SmartScreen warning on install)

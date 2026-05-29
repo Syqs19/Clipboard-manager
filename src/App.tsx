@@ -10,6 +10,7 @@ import {
   type SelectModifier,
 } from "./lib/api";
 import { Store } from "@tauri-apps/plugin-store";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { tagColor } from "./lib/format";
 import { Sidebar, type Filter } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
@@ -277,6 +278,20 @@ function App() {
       notify(`Impossibile aprire la cartella: ${e}`, "error");
     }
   };
+  // Azione rapida in base al tipo di clip: link → browser, file → apri.
+  const handleQuickOpen = async (clip: Clip) => {
+    try {
+      const text = clip.content?.trim() ?? "";
+      if (clip.content_type === "url" && text) {
+        await openUrl(text);
+      } else if (clip.content_type === "files") {
+        const first = (JSON.parse(clip.content || "[]") as string[])[0];
+        if (first) await api.openPath(first);
+      }
+    } catch (e) {
+      notify(`Couldn't open: ${e}`, "error");
+    }
+  };
   const handleRenameTag = async (oldName: string, newName: string) => {
     try {
       await api.renameTag(oldName, newName);
@@ -423,6 +438,7 @@ function App() {
             allTags={tags}
             onReveal={handleReveal}
             onCopyImageAsFile={handleCopyImageAsFile}
+            onQuickOpen={handleQuickOpen}
             highlightQuery={query}
             grouped={!query.trim()}
           />

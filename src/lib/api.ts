@@ -47,6 +47,7 @@ export const api = {
     invoke<void>("bulk_remove_tag", { ids, name }),
   revealInExplorer: (path: string) =>
     invoke<void>("reveal_in_explorer", { path }),
+  openPath: (path: string) => invoke<void>("open_path", { path }),
   addTag: (id: number, name: string) => invoke<void>("add_tag", { id, name }),
   removeTag: (id: number, name: string) =>
     invoke<void>("remove_tag", { id, name }),

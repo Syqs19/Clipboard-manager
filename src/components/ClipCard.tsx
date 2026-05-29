@@ -4,11 +4,13 @@ import {
   CheckCircle2,
   Circle,
   Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   FileDown,
   FileText,
   FolderOpen,
+  Globe,
   Pencil,
   Pin,
   Plus,
@@ -67,6 +69,7 @@ export function ClipCard({
   onBulkClick,
   onReveal,
   onCopyImageAsFile,
+  onQuickOpen,
   selectModifier,
   selectionMode,
   allTags,
@@ -90,6 +93,7 @@ export function ClipCard({
   onBulkClick?: (e: React.MouseEvent) => void;
   onReveal?: (path: string) => void;
   onCopyImageAsFile?: (id: number) => void;
+  onQuickOpen?: (clip: Clip) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
   allTags: [string, number, string | null, boolean][];
@@ -125,6 +129,15 @@ export function ClipCard({
     } catch {
       return [];
     }
+  })();
+
+  // azione rapida in base al tipo: link → browser, file → apri
+  const quick = (() => {
+    if (clip.content_type === "url")
+      return { title: "Open in browser", icon: <Globe className="h-4 w-4" /> };
+    if (isFiles && filePaths[0])
+      return { title: "Open file", icon: <ExternalLink className="h-4 w-4" /> };
+    return null;
   })();
 
   const startEdit = () => {
@@ -384,6 +397,11 @@ export function ClipCard({
       {/* azioni in hover (nascoste durante la modalità selezione) */}
       {!editing && !selectionMode && (
         <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-zinc-900/90 p-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+          {quick && onQuickOpen && (
+            <IconButton title={quick.title} onClick={() => onQuickOpen(clip)}>
+              {quick.icon}
+            </IconButton>
+          )}
           {clip.sensitive && (
             <IconButton
               title={revealed ? "Hide" : "Reveal"}

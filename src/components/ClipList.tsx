@@ -97,6 +97,7 @@ export function ClipList({
   allTags,
   onReveal,
   onCopyImageAsFile,
+  onQuickOpen,
   highlightQuery,
   grouped = true,
 }: {
@@ -121,6 +122,7 @@ export function ClipList({
   allTags: [string, number, string | null, boolean][];
   onReveal: (path: string) => void;
   onCopyImageAsFile: (id: number) => void;
+  onQuickOpen: (clip: Clip) => void;
   highlightQuery: string;
   /// false in ricerca: lista piatta per pertinenza, senza header data né riordino pinnati.
   grouped?: boolean;
@@ -238,6 +240,7 @@ export function ClipList({
                 onBulkClick={(e) => onBulkClick(i, e)}
                 onReveal={onReveal}
                 onCopyImageAsFile={onCopyImageAsFile}
+                onQuickOpen={onQuickOpen}
                 selectModifier={selectModifier}
                 selectionMode={selectionMode}
                 allTags={allTags}
