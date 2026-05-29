@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Boxes,
   Check,
   CheckCircle2,
   Circle,
@@ -23,6 +24,7 @@ import { type Clip, type SelectModifier } from "../lib/api";
 import { TagPicker } from "./TagPicker";
 import { TransformPicker } from "./TransformPicker";
 import { CodeBlock } from "./CodeBlock";
+import { GroupPreview } from "./GroupPreview";
 import {
   detectColors,
   maskSensitive,
@@ -79,6 +81,7 @@ export function ClipCard({
   onCopyImageAsFile,
   onQuickOpen,
   onTransform,
+  onOpenGroup,
   onPopoverOpenChange,
   selectModifier,
   selectionMode,
@@ -105,6 +108,7 @@ export function ClipCard({
   onCopyImageAsFile?: (id: number) => void;
   onQuickOpen?: (clip: Clip) => void;
   onTransform?: (id: number, transform: string) => void;
+  onOpenGroup?: (clip: Clip) => void;
   onPopoverOpenChange?: (open: boolean) => void;
   selectModifier?: SelectModifier;
   selectionMode?: boolean;
@@ -133,6 +137,8 @@ export function ClipCard({
   const text = masked ? maskSensitive(clip.preview) : clip.preview;
   const isImage = clip.content_type === "image" && !!clip.image_path;
   const isFiles = clip.content_type === "files";
+  const isGroup = clip.content_type === "group";
+  const groupItems = clip.items ?? [];
   // clip di codice (tag automatico "Code"): syntax highlighting nell'anteprima,
   // ma solo senza ricerca attiva (l'highlight dei match userebbe gli stessi nodi)
   const isCode = clip.tags.includes("Code");
@@ -239,7 +245,8 @@ export function ClipCard({
       return;
     }
     onSelect(); // sincronizza la selezione da tastiera col click
-    if (isImage) onPreview(clip);
+    if (isGroup) onOpenGroup?.(clip);
+    else if (isImage) onPreview(clip);
     else onCopy(clip.id);
   };
 
@@ -297,7 +304,7 @@ export function ClipCard({
                 )}
               </IconButton>
             )}
-            {!isImage && !isFiles && (
+            {!isImage && !isFiles && !isGroup && (
               <IconButton title="Edit" onClick={startEdit}>
                 <Pencil className="h-4 w-4" />
               </IconButton>
@@ -321,7 +328,7 @@ export function ClipCard({
                 <FileDown className="h-4 w-4" />
               </IconButton>
             )}
-            {onTransform && !isFiles && (
+            {onTransform && !isFiles && !isGroup && (
               <div className="relative">
                 <IconButton
                   title="Copy as…"
@@ -339,13 +346,19 @@ export function ClipCard({
                 )}
               </div>
             )}
-            <IconButton
-              title={hasRich ? "Copy with formatting" : "Copy"}
-              onClick={() => onCopy(clip.id)}
-            >
-              <Copy className="h-4 w-4" />
-            </IconButton>
-            {hasRich && (
+            {isGroup ? (
+              <IconButton title="Open group" onClick={() => onOpenGroup?.(clip)}>
+                <Boxes className="h-4 w-4" />
+              </IconButton>
+            ) : (
+              <IconButton
+                title={hasRich ? "Copy with formatting" : "Copy"}
+                onClick={() => onCopy(clip.id)}
+              >
+                <Copy className="h-4 w-4" />
+              </IconButton>
+            )}
+            {!isGroup && hasRich && (
               <IconButton
                 title="Copy as plain text"
                 onClick={() => onCopy(clip.id, true)}
@@ -406,6 +419,8 @@ export function ClipCard({
             </span>
           </div>
         </div>
+      ) : isGroup ? (
+        <GroupPreview items={groupItems} />
       ) : isImage ? (
         thumbUrl ? (
           // altezza massima fissa con ritaglio dall'alto: immagini molto alte

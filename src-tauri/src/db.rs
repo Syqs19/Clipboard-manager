@@ -46,6 +46,21 @@ CREATE TABLE IF NOT EXISTS clip_tags (
     FOREIGN KEY (clip_id) REFERENCES clips(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id)  REFERENCES tags(id)  ON DELETE CASCADE
 );
+-- elementi di una clip-gruppo (content_type='group'): le clip singole non
+-- usano questa tabella, restano atomiche sulla riga clips. CASCADE: cancellando
+-- la clip-gruppo si cancellano i suoi elementi.
+CREATE TABLE IF NOT EXISTS clip_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    clip_id    INTEGER NOT NULL,
+    position   INTEGER NOT NULL,            -- ordine dell'elemento nel gruppo
+    item_type  TEXT NOT NULL,               -- 'text' | 'image' | 'url' | 'files'
+    content    TEXT,                        -- testo, o JSON di path per i files
+    image_path TEXT,                        -- PNG cifrato per gli elementi immagine
+    label      TEXT,                        -- etichetta utente (es. 'email'), solo testi
+    char_count INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (clip_id) REFERENCES clips(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_clip_items_clip ON clip_items(clip_id, position);
 CREATE INDEX IF NOT EXISTS idx_clips_created ON clips(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clips_pinned  ON clips(pinned, pinned_order);
 ";
@@ -147,6 +162,9 @@ pub struct Clip {
     pub sensitive: bool,
     pub hash: String,
     pub tags: Vec<String>,
+    /// Elementi della clip-gruppo (vuoto per le clip singole).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ClipItem>,
     /// Testo riconosciuto via OCR per le immagini (NULL altrimenti). Usato solo
     /// per la ricerca, non serve al frontend → non serializzato.
     #[serde(skip_serializing)]
@@ -167,6 +185,29 @@ pub struct NewClip {
     pub sensitive: bool,
     pub sensitive_kind: Option<String>,
     pub hash: String,
+}
+
+/// Un elemento di una clip-gruppo, restituito al frontend.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ClipItem {
+    pub id: i64,
+    pub position: i64,
+    pub item_type: String,
+    pub content: Option<String>,
+    pub image_path: Option<String>,
+    pub thumb_path: Option<String>,
+    pub label: Option<String>,
+    pub char_count: i64,
+}
+
+/// Dati per inserire un nuovo elemento in una clip-gruppo (l'id lo assegna il DB).
+#[derive(Debug, Clone)]
+pub struct NewClipItem {
+    pub item_type: String,
+    pub content: Option<String>,
+    pub image_path: Option<String>,
+    pub label: Option<String>,
+    pub char_count: i64,
 }
 
 /// Conteggi aggregati per il pannello statistiche.
@@ -286,9 +327,35 @@ impl Db {
     /// Tutti i percorsi immagine referenziati (per ripulire i file orfani).
     pub fn all_image_paths(&self) -> rusqlite::Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT image_path FROM clips WHERE image_path IS NOT NULL")?;
+        // include anche le immagini che vivono dentro le clip-gruppo (clip_items),
+        // altrimenti il cleanup degli orfani le cancellerebbe per errore.
+        let mut stmt = conn.prepare(
+            "SELECT image_path FROM clips WHERE image_path IS NOT NULL
+             UNION
+             SELECT image_path FROM clip_items WHERE image_path IS NOT NULL",
+        )?;
         let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    /// Path immagine degli ELEMENTI (clip_items) appartenenti alle clip indicate.
+    /// Serve a ripulire i PNG dei gruppi quando vengono eliminati (i loro item
+    /// non sono in clips.image_path ma in clip_items.image_path).
+    pub fn group_item_image_paths(&self, ids: &[i64]) -> rusqlite::Result<Vec<String>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT image_path FROM clip_items
+             WHERE image_path IS NOT NULL AND clip_id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(ids.iter()),
+            |r| r.get::<_, String>(0),
+        )?;
         rows.collect()
     }
 
@@ -314,9 +381,11 @@ impl Db {
                 params![new_order, clip_id],
             )?;
         } else {
+            // despinnando, la card torna in cima ai non-pinnati (created_at = ora)
+            // così non "si perde" in mezzo alla cronologia per la sua vecchia data.
             conn.execute(
-                "UPDATE clips SET pinned = 0, pinned_order = NULL WHERE id = ?1",
-                params![clip_id],
+                "UPDATE clips SET pinned = 0, pinned_order = NULL, created_at = ?2 WHERE id = ?1",
+                params![clip_id, now_millis()],
             )?;
         }
         Ok(())
@@ -707,8 +776,269 @@ impl Db {
         let mut clips: Vec<Clip> = stmt.query_map(p, Self::map_row)?.collect::<Result<_, _>>()?;
         for c in clips.iter_mut() {
             c.tags = Self::tags_for_clip(conn, c.id)?;
+            if c.content_type == "group" {
+                c.items = Self::items_for_clip_conn(conn, c.id)?;
+            }
         }
         Ok(clips)
+    }
+
+    /// Inserisce un elemento in una clip-gruppo alla posizione `position`.
+    pub fn insert_clip_item(
+        &self,
+        clip_id: i64,
+        position: i64,
+        item: &NewClipItem,
+    ) -> rusqlite::Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO clip_items (clip_id, position, item_type, content, image_path, label, char_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                clip_id,
+                position,
+                item.item_type,
+                item.content,
+                item.image_path,
+                item.label,
+                item.char_count,
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Elementi di una clip-gruppo, ordinati per posizione.
+    pub fn items_for_clip(&self, clip_id: i64) -> rusqlite::Result<Vec<ClipItem>> {
+        let conn = self.conn.lock().unwrap();
+        Self::items_for_clip_conn(&conn, clip_id)
+    }
+
+    /// Versione che riusa una connessione già lockata (per evitare doppi lock
+    /// quando si caricano gli item insieme alla lista delle clip).
+    fn items_for_clip_conn(conn: &Connection, clip_id: i64) -> rusqlite::Result<Vec<ClipItem>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, position, item_type, content, image_path, label, char_count
+             FROM clip_items WHERE clip_id = ?1 ORDER BY position",
+        )?;
+        let rows = stmt.query_map(params![clip_id], |row| {
+            let image_path: Option<String> = row.get(4)?;
+            let thumb_path = image_path.as_deref().map(|p| {
+                crate::images::thumb_path_for(std::path::Path::new(p))
+                    .to_string_lossy()
+                    .to_string()
+            });
+            Ok(ClipItem {
+                id: row.get(0)?,
+                position: row.get(1)?,
+                item_type: row.get(2)?,
+                content: row.get(3)?,
+                image_path,
+                thumb_path,
+                label: row.get(5)?,
+                char_count: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Un singolo elemento di gruppo (per copiarlo negli appunti).
+    pub fn get_clip_item(&self, item_id: i64) -> rusqlite::Result<Option<ClipItem>> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id, position, item_type, content, image_path, label, char_count
+             FROM clip_items WHERE id = ?1",
+            params![item_id],
+            |row| {
+                let image_path: Option<String> = row.get(4)?;
+                let thumb_path = image_path.as_deref().map(|p| {
+                    crate::images::thumb_path_for(std::path::Path::new(p))
+                        .to_string_lossy()
+                        .to_string()
+                });
+                Ok(ClipItem {
+                    id: row.get(0)?,
+                    position: row.get(1)?,
+                    item_type: row.get(2)?,
+                    content: row.get(3)?,
+                    image_path,
+                    thumb_path,
+                    label: row.get(5)?,
+                    char_count: row.get(6)?,
+                })
+            },
+        )
+        .optional()
+    }
+
+    /// Imposta (o azzera) l'etichetta di un elemento di gruppo.
+    pub fn set_item_label(&self, item_id: i64, label: Option<&str>) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE clip_items SET label = ?2 WHERE id = ?1",
+            params![item_id, label],
+        )?;
+        Ok(())
+    }
+
+    /// Tipo "effettivo" di una clip ai fini del merge: per una clip-gruppo è il
+    /// tipo dei suoi elementi (omogeneo per costruzione), altrimenti il suo
+    /// `content_type`. `url` è trattato come `text` (entrambi testo copiabile).
+    fn effective_type(conn: &Connection, id: i64, content_type: &str) -> rusqlite::Result<String> {
+        let raw = if content_type == "group" {
+            conn.query_row(
+                "SELECT item_type FROM clip_items WHERE clip_id = ?1 ORDER BY position LIMIT 1",
+                params![id],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?
+            .unwrap_or_default()
+        } else {
+            content_type.to_string()
+        };
+        Ok(if raw == "url" { "text".into() } else { raw })
+    }
+
+    /// Trasforma una clip in una lista di (item_type, content, image_path) da
+    /// inserire come elementi di gruppo. Una clip-gruppo restituisce i suoi
+    /// elementi esistenti; una clip singola un solo elemento dai suoi campi.
+    fn clip_as_items(
+        conn: &Connection,
+        id: i64,
+        content_type: &str,
+        content: Option<String>,
+        image_path: Option<String>,
+        char_count: i64,
+    ) -> rusqlite::Result<Vec<(String, Option<String>, Option<String>, Option<String>, i64)>> {
+        if content_type == "group" {
+            let mut stmt = conn.prepare(
+                "SELECT item_type, content, image_path, label, char_count
+                 FROM clip_items WHERE clip_id = ?1 ORDER BY position",
+            )?;
+            let rows = stmt.query_map(params![id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })?;
+            rows.collect()
+        } else {
+            Ok(vec![(content_type.to_string(), content, image_path, None, char_count)])
+        }
+    }
+
+    /// Fonde `source` dentro `target` (devono essere dello stesso tipo effettivo).
+    /// - se `target` è già un gruppo: aggiunge gli elementi di `source` in coda;
+    /// - altrimenti: crea una NUOVA clip-gruppo con gli elementi di target+source,
+    ///   ne eredita i tag uniti, e rimuove le due clip originali.
+    /// I PNG su disco NON vengono toccati: gli item riusano gli stessi `image_path`.
+    /// Ritorna l'id della clip-gruppo risultante.
+    pub fn merge_clips(&self, source_id: i64, target_id: i64, now: i64) -> rusqlite::Result<i64> {
+        if source_id == target_id {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "source e target coincidono".into(),
+            ));
+        }
+        let mut guard = self.conn.lock().unwrap();
+        // transazione: se una qualsiasi scrittura fallisce, il rollback (al drop
+        // del tx) ripristina lo stato → niente gruppi a metà o originali perse.
+        let conn = guard.transaction()?;
+
+        // carica i campi minimi di entrambe
+        let load = |id: i64| -> rusqlite::Result<(String, Option<String>, Option<String>, i64)> {
+            conn.query_row(
+                "SELECT content_type, content, image_path, char_count FROM clips WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+        };
+        let (s_type, s_content, s_image, s_cc) = load(source_id)?;
+        let (t_type, t_content, t_image, t_cc) = load(target_id)?;
+
+        // guardia same-type sul tipo effettivo
+        let s_eff = Self::effective_type(&conn, source_id, &s_type)?;
+        let t_eff = Self::effective_type(&conn, target_id, &t_type)?;
+        if s_eff != t_eff {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "tipi diversi: merge non consentito".into(),
+            ));
+        }
+
+        let source_items =
+            Self::clip_as_items(&conn, source_id, &s_type, s_content, s_image, s_cc)?;
+
+        // posizione di partenza per i nuovi item nel gruppo target
+        let next_pos = |conn: &Connection, clip_id: i64| -> rusqlite::Result<i64> {
+            conn.query_row(
+                "SELECT COALESCE(MAX(position) + 1, 0) FROM clip_items WHERE clip_id = ?1",
+                params![clip_id],
+                |r| r.get::<_, i64>(0),
+            )
+        };
+
+        let insert_items =
+            |conn: &Connection,
+             group_id: i64,
+             start: i64,
+             items: &[(String, Option<String>, Option<String>, Option<String>, i64)]|
+             -> rusqlite::Result<()> {
+                for (i, (ty, content, image, label, cc)) in items.iter().enumerate() {
+                    conn.execute(
+                        "INSERT INTO clip_items (clip_id, position, item_type, content, image_path, label, char_count)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![group_id, start + i as i64, ty, content, image, label, cc],
+                    )?;
+                }
+                Ok(())
+            };
+
+        if t_type == "group" {
+            // target è già un gruppo → aggiungo gli elementi di source in coda
+            let start = next_pos(&conn, target_id)?;
+            insert_items(&conn, target_id, start, &source_items)?;
+            // i tag di source confluiscono nel gruppo
+            conn.execute(
+                "INSERT OR IGNORE INTO clip_tags (clip_id, tag_id)
+                 SELECT ?1, tag_id FROM clip_tags WHERE clip_id = ?2",
+                params![target_id, source_id],
+            )?;
+            conn.execute("DELETE FROM clips WHERE id = ?1", params![source_id])?;
+            conn.commit()?;
+            return Ok(target_id);
+        }
+
+        // target è una clip singola → crea una nuova clip-gruppo.
+        // Se il target era pinnato, il gruppo eredita pin e posizione, così
+        // "prende il posto" del vecchio invece di nascere in fondo.
+        let (t_pinned, t_pinned_order): (i64, Option<i64>) = conn.query_row(
+            "SELECT pinned, pinned_order FROM clips WHERE id = ?1",
+            params![target_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        let target_items =
+            Self::clip_as_items(&conn, target_id, &t_type, t_content, t_image, t_cc)?;
+        let preview = format!("Group · {} items", target_items.len() + source_items.len());
+        let hash = format!("group-{now}-{target_id}-{source_id}");
+        conn.execute(
+            "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, sensitive, hash, pinned, pinned_order)
+             VALUES (NULL, 'group', NULL, ?1, ?2, 0, 0, ?3, ?4, ?5)",
+            params![preview, now, hash, t_pinned, t_pinned_order],
+        )?;
+        let group_id = conn.last_insert_rowid();
+        insert_items(&conn, group_id, 0, &target_items)?;
+        insert_items(&conn, group_id, target_items.len() as i64, &source_items)?;
+        // unione dei tag di entrambe le originali sul gruppo
+        conn.execute(
+            "INSERT OR IGNORE INTO clip_tags (clip_id, tag_id)
+             SELECT ?1, tag_id FROM clip_tags WHERE clip_id IN (?2, ?3)",
+            params![group_id, target_id, source_id],
+        )?;
+        // rimuovi le due clip originali (i PNG restano: ora puntati dagli item)
+        conn.execute("DELETE FROM clips WHERE id IN (?1, ?2)", params![target_id, source_id])?;
+        conn.commit()?;
+        Ok(group_id)
     }
 
     fn map_row(row: &Row) -> rusqlite::Result<Clip> {
@@ -735,6 +1065,7 @@ impl Db {
             content_rtf: row.get(12)?,
             ocr_text: row.get(13)?,
             tags: Vec::new(),
+            items: Vec::new(),
         })
     }
 
@@ -1109,5 +1440,144 @@ mod tests {
         let list = db.list_recent(10).unwrap();
         let order: Vec<_> = list.iter().filter_map(|c| c.content.clone()).collect();
         assert_eq!(order, vec!["mid", "new", "old"]); // pinned in cima, poi data desc
+    }
+
+    fn new_group(ts: i64) -> NewClip {
+        NewClip {
+            content: None,
+            content_html: None,
+            content_rtf: None,
+            content_type: "group".into(),
+            image_path: None,
+            preview: "Group".into(),
+            created_at: ts,
+            char_count: 0,
+            sensitive: false,
+            sensitive_kind: None,
+            hash: format!("group-{ts}"),
+        }
+    }
+
+    fn new_item(item_type: &str, content: &str, label: Option<&str>) -> NewClipItem {
+        NewClipItem {
+            item_type: item_type.into(),
+            content: Some(content.into()),
+            image_path: None,
+            label: label.map(|s| s.into()),
+            char_count: content.chars().count() as i64,
+        }
+    }
+
+    #[test]
+    fn merge_two_singles_creates_group_and_removes_originals() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("mario@x.it", 100)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("Passw0rd!", 200)).unwrap();
+        let gid = db.merge_clips(a, b, 300).unwrap();
+
+        // le due originali sono sparite, resta solo il gruppo
+        let list = db.list_recent(10).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, gid);
+        assert_eq!(list[0].content_type, "group");
+
+        // il gruppo contiene entrambi gli elementi, nell'ordine target poi source
+        let items = db.items_for_clip(gid).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].content.as_deref(), Some("Passw0rd!")); // target (b) prima
+        assert_eq!(items[1].content.as_deref(), Some("mario@x.it")); // source (a) dopo
+    }
+
+    #[test]
+    fn merge_onto_group_appends_in_place() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("uno", 100)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("due", 200)).unwrap();
+        let gid = db.merge_clips(a, b, 300).unwrap();
+        let c = db.insert_or_bump_clip(&new_text("tre", 400)).unwrap();
+
+        // trascino c sul gruppo esistente → append, stesso gid, nessuna nuova clip
+        let same = db.merge_clips(c, gid, 500).unwrap();
+        assert_eq!(same, gid);
+        let list = db.list_recent(10).unwrap();
+        assert_eq!(list.len(), 1); // solo il gruppo
+        let items = db.items_for_clip(gid).unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[2].content.as_deref(), Some("tre")); // aggiunto in coda
+    }
+
+    #[test]
+    fn merge_unites_tags() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("aaa", 100)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("bbb", 200)).unwrap();
+        let t1 = db.get_or_create_tag("rosso", None, false).unwrap();
+        let t2 = db.get_or_create_tag("verde", None, false).unwrap();
+        db.attach_tag(a, t1).unwrap();
+        db.attach_tag(b, t2).unwrap();
+        let gid = db.merge_clips(a, b, 300).unwrap();
+        let tags = db.list_recent(10).unwrap()[0].tags.clone();
+        assert!(tags.contains(&"rosso".to_string()));
+        assert!(tags.contains(&"verde".to_string()));
+        let _ = gid;
+    }
+
+    #[test]
+    fn merge_onto_pinned_inherits_pin() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_or_bump_clip(&new_text("src", 100)).unwrap();
+        let b = db.insert_or_bump_clip(&new_text("tgt", 200)).unwrap();
+        db.set_pinned(b, true).unwrap();
+        let gid = db.merge_clips(a, b, 300).unwrap();
+        let group = db.list_recent(10).unwrap().into_iter().find(|c| c.id == gid).unwrap();
+        assert!(group.pinned); // il gruppo eredita il pin del target
+    }
+
+    #[test]
+    fn merge_rejects_different_types() {
+        let db = Db::open_in_memory().unwrap();
+        let txt = db.insert_or_bump_clip(&new_text("hello", 100)).unwrap();
+        let img = NewClip {
+            content: None,
+            content_html: None,
+            content_rtf: None,
+            content_type: "image".into(),
+            image_path: Some("X:/img.png".into()),
+            preview: "Image".into(),
+            created_at: 200,
+            char_count: 0,
+            sensitive: false,
+            sensitive_kind: None,
+            hash: "img-hash".into(),
+        };
+        let img_id = db.insert_or_bump_clip(&img).unwrap();
+        assert!(db.merge_clips(txt, img_id, 300).is_err());
+    }
+
+    #[test]
+    fn clip_items_insert_order_label_and_cascade_delete() {
+        let db = Db::open_in_memory().unwrap();
+        let gid = db.insert_or_bump_clip(&new_group(100)).unwrap();
+        db.insert_clip_item(gid, 0, &new_item("text", "mario@x.it", Some("email")))
+            .unwrap();
+        let i2 = db
+            .insert_clip_item(gid, 1, &new_item("text", "Passw0rd!", None))
+            .unwrap();
+
+        let items = db.items_for_clip(gid).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].position, 0);
+        assert_eq!(items[0].label.as_deref(), Some("email"));
+        assert_eq!(items[1].content.as_deref(), Some("Passw0rd!"));
+        assert_eq!(items[1].label, None);
+
+        // etichetta impostata a posteriori
+        db.set_item_label(i2, Some("password")).unwrap();
+        let items = db.items_for_clip(gid).unwrap();
+        assert_eq!(items[1].label.as_deref(), Some("password"));
+
+        // CASCADE: cancellando la clip-gruppo spariscono i suoi elementi
+        db.delete_clip(gid).unwrap();
+        assert!(db.items_for_clip(gid).unwrap().is_empty());
     }
 }

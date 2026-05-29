@@ -278,14 +278,25 @@ pub fn reorder_pinned(db: State<Database>, ids: Vec<i64>) -> Result<(), String> 
     db.reorder_pinned(&ids).map_err(|e| e.to_string())
 }
 
+/// Cancella il PNG e la sua thumbnail dato il path.
+fn remove_png_and_thumb(path: &str) {
+    let p = std::path::Path::new(path);
+    let _ = std::fs::remove_file(p);
+    let _ = std::fs::remove_file(crate::images::thumb_path_for(p));
+}
+
 #[tauri::command]
 pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
     // elimina anche l'eventuale file immagine + thumbnail associati
     if let Ok(Some(clip)) = db.get_clip(id) {
         if let Some(path) = clip.image_path {
-            let p = std::path::Path::new(&path);
-            let _ = std::fs::remove_file(p);
-            let _ = std::fs::remove_file(crate::images::thumb_path_for(p));
+            remove_png_and_thumb(&path);
+        }
+    }
+    // se è una clip-gruppo, ripulisci anche i PNG dei suoi elementi immagine
+    if let Ok(paths) = db.group_item_image_paths(&[id]) {
+        for path in paths {
+            remove_png_and_thumb(&path);
         }
     }
     db.delete_clip(id).map_err(|e| e.to_string())
@@ -296,9 +307,13 @@ pub fn remove_clip(db: State<Database>, id: i64) -> Result<(), String> {
 pub fn remove_clips(db: State<Database>, ids: Vec<i64>) -> Result<(), String> {
     if let Ok(paths) = db.image_paths_for(&ids) {
         for p in paths {
-            let path = std::path::Path::new(&p);
-            let _ = std::fs::remove_file(path);
-            let _ = std::fs::remove_file(crate::images::thumb_path_for(path));
+            remove_png_and_thumb(&p);
+        }
+    }
+    // PNG degli elementi delle eventuali clip-gruppo tra gli id
+    if let Ok(paths) = db.group_item_image_paths(&ids) {
+        for p in paths {
+            remove_png_and_thumb(&p);
         }
     }
     db.delete_clips(&ids).map_err(|e| e.to_string())?;
@@ -314,6 +329,78 @@ pub fn bulk_set_pinned(
 ) -> Result<(), String> {
     for id in ids {
         db.set_pinned(id, pinned).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Fonde la clip `source` dentro `target` (devono essere dello stesso tipo).
+/// Ritorna l'id della clip-gruppo risultante.
+#[tauri::command]
+pub fn merge_clips(db: State<Database>, source_id: i64, target_id: i64) -> Result<i64, String> {
+    db.merge_clips(source_id, target_id, crate::db::now_millis())
+        .map_err(|e| e.to_string())
+}
+
+/// Elementi di una clip-gruppo (per la vista dettaglio).
+#[tauri::command]
+pub fn list_clip_items(db: State<Database>, clip_id: i64) -> Result<Vec<crate::db::ClipItem>, String> {
+    db.items_for_clip(clip_id).map_err(|e| e.to_string())
+}
+
+/// Imposta (o azzera) l'etichetta di un elemento di gruppo.
+#[tauri::command]
+pub fn set_item_label(
+    db: State<Database>,
+    item_id: i64,
+    label: Option<String>,
+) -> Result<(), String> {
+    db.set_item_label(item_id, label.as_deref()).map_err(|e| e.to_string())
+}
+
+/// Copia negli appunti un singolo elemento di una clip-gruppo (per tipo:
+/// immagine ricostruita dal PNG, file come CF_HDROP, testo come testo).
+#[tauri::command]
+pub fn copy_clip_item(
+    db: State<Database>,
+    key: State<Key>,
+    last_self_write: State<LastSelfWrite>,
+    item_id: i64,
+) -> Result<(), String> {
+    let item = db
+        .get_clip_item(item_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "item not found".to_string())?;
+    let mark = |hash: String| {
+        if let Ok(mut g) = last_self_write.lock() {
+            *g = Some(hash);
+        }
+    };
+    if item.item_type == "image" {
+        if let Some(path) = item.image_path {
+            let (w, h, rgba) =
+                crate::images::load_png_rgba(std::path::Path::new(&path), key.inner())?;
+            mark(crate::db::bytes_hash(&rgba));
+            let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+            cb.set_image(arboard::ImageData {
+                width: w as usize,
+                height: h as usize,
+                bytes: std::borrow::Cow::Owned(rgba),
+            })
+            .map_err(|e| e.to_string())?;
+        }
+    } else if item.item_type == "files" {
+        if let Some(json) = item.content {
+            let paths: Vec<String> = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            let watcher_json = serde_json::to_string(&paths).map_err(|e| e.to_string())?;
+            mark(crate::db::content_hash(&watcher_json));
+            if !crate::win_clipboard::write_file_drop(&paths) {
+                return Err("Couldn't write the file list to the clipboard".into());
+            }
+        }
+    } else if let Some(content) = item.content {
+        mark(crate::db::content_hash(&content));
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        cb.set_text(content).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -335,6 +422,17 @@ struct ExportTag {
     is_auto: bool,
 }
 
+/// Un elemento di una clip-gruppo nell'export. Le immagini sono inlinate b64.
+#[derive(Serialize, Deserialize)]
+struct ExportItem {
+    item_type: String,
+    content: Option<String>,
+    image_filename: Option<String>,
+    image_b64: Option<String>,
+    label: Option<String>,
+    char_count: i64,
+}
+
 #[derive(Serialize, Deserialize)]
 struct ExportClip {
     content: Option<String>,
@@ -350,6 +448,9 @@ struct ExportClip {
     sensitive_kind: Option<String>,
     hash: String,
     tags: Vec<String>,
+    /// elementi della clip-gruppo (vuoto per le clip singole)
+    #[serde(default)]
+    items: Vec<ExportItem>,
 }
 
 /// Esporta tutta la cronologia (clip + tag) in un file JSON. Le immagini
@@ -378,6 +479,30 @@ pub fn export_history(
             }
             None => (None, None),
         };
+        // per le clip-gruppo, serializza anche gli elementi (immagini inlinate b64)
+        let mut items = Vec::new();
+        if c.content_type == "group" {
+            for it in &c.items {
+                let (ifn, ib64) = match &it.image_path {
+                    Some(p) => {
+                        let bytes = crate::images::load_png_bytes(Path::new(p), key.inner())?;
+                        let fname = Path::new(p)
+                            .file_name()
+                            .map(|s| s.to_string_lossy().to_string());
+                        (fname, Some(B64.encode(&bytes)))
+                    }
+                    None => (None, None),
+                };
+                items.push(ExportItem {
+                    item_type: it.item_type.clone(),
+                    content: it.content.clone(),
+                    image_filename: ifn,
+                    image_b64: ib64,
+                    label: it.label.clone(),
+                    char_count: it.char_count,
+                });
+            }
+        }
         export_clips.push(ExportClip {
             content: c.content.clone(),
             content_type: c.content_type.clone(),
@@ -392,11 +517,12 @@ pub fn export_history(
             sensitive_kind: None, // ricategorizzato all'import dal contenuto
             hash: c.hash.clone(),
             tags: c.tags.clone(),
+            items,
         });
     }
 
     let data = ExportData {
-        version: 1,
+        version: 2, // v2: include gli elementi (items) delle clip-gruppo
         exported_at: crate::db::now_millis(),
         tags: tags
             .into_iter()
@@ -423,7 +549,9 @@ pub fn import_history(
 ) -> Result<usize, String> {
     let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let data: ExportData = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-    if data.version != 1 {
+    // v1 = senza gruppi, v2 = con gli items delle clip-gruppo. Entrambe ok:
+    // i file v1 non hanno il campo items (serde default = vuoto).
+    if data.version != 1 && data.version != 2 {
         return Err(format!("unknown export format (v{})", data.version));
     }
 
@@ -490,6 +618,7 @@ pub fn import_history(
             None
         };
 
+        let is_group = c.content_type == "group";
         let new = NewClip {
             content: c.content,
             content_html: None,
@@ -509,6 +638,29 @@ pub fn import_history(
         for tag_name in c.tags {
             if let Ok(tid) = db.get_or_create_tag(&tag_name, None, false) {
                 let _ = db.attach_tag(id, tid);
+            }
+        }
+        // ricostruisci gli elementi di una clip-gruppo (immagini da b64 → cifrate)
+        if is_group {
+            for (pos, it) in c.items.into_iter().enumerate() {
+                let item_image = match (it.image_b64.as_deref(), it.image_filename.as_deref()) {
+                    (Some(b64), Some(fname)) => {
+                        let png_bytes = B64.decode(b64).map_err(|e| e.to_string())?;
+                        let blob = crate::crypto::encrypt_bytes(key.inner(), &png_bytes)?;
+                        let dest = images_dir.join(fname);
+                        std::fs::write(&dest, &blob).map_err(|e| e.to_string())?;
+                        Some(dest.to_string_lossy().to_string())
+                    }
+                    _ => None,
+                };
+                let new_item = crate::db::NewClipItem {
+                    item_type: it.item_type,
+                    content: it.content,
+                    image_path: item_image,
+                    label: it.label,
+                    char_count: it.char_count,
+                };
+                let _ = db.insert_clip_item(id, pos as i64, &new_item);
             }
         }
         imported += 1;

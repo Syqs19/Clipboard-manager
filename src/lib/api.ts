@@ -1,13 +1,25 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+/// Un elemento di una clip-gruppo (specchio di `db::ClipItem`).
+export interface ClipItem {
+  id: number;
+  position: number;
+  item_type: string; // 'text' | 'image' | 'url' | 'files'
+  content: string | null;
+  image_path: string | null;
+  thumb_path: string | null;
+  label: string | null;
+  char_count: number;
+}
+
 /// Specchio di `db::Clip` lato Rust.
 export interface Clip {
   id: number;
   content: string | null;
   content_html: string | null;
   content_rtf: string | null;
-  content_type: string; // 'text' | 'image' | 'url' | 'files'
+  content_type: string; // 'text' | 'image' | 'url' | 'files' | 'group'
   image_path: string | null;
   thumb_path: string | null;
   preview: string;
@@ -18,6 +30,8 @@ export interface Clip {
   sensitive: boolean;
   hash: string;
   tags: string[];
+  /// elementi della clip-gruppo (presenti solo se content_type === 'group')
+  items?: ClipItem[];
 }
 
 export const api = {
@@ -49,6 +63,14 @@ export const api = {
     invoke<void>("rename_tag", { old, new: newName }),
   bulkRemoveTag: (ids: number[], name: string) =>
     invoke<void>("bulk_remove_tag", { ids, name }),
+  mergeClips: (sourceId: number, targetId: number) =>
+    invoke<number>("merge_clips", { sourceId, targetId }),
+  listClipItems: (clipId: number) =>
+    invoke<ClipItem[]>("list_clip_items", { clipId }),
+  setItemLabel: (itemId: number, label: string | null) =>
+    invoke<void>("set_item_label", { itemId, label }),
+  copyClipItem: (itemId: number) =>
+    invoke<void>("copy_clip_item", { itemId }),
   revealInExplorer: (path: string) =>
     invoke<void>("reveal_in_explorer", { path }),
   openPath: (path: string) => invoke<void>("open_path", { path }),

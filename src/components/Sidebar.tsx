@@ -5,28 +5,36 @@ import { UpdateButton } from "./UpdateButton";
 import {
   ArrowDownAZ,
   ArrowDownWideNarrow,
+  Boxes,
   ChevronDown,
   FileText,
   Image,
   Inbox,
   Pin,
   Star,
+  Tag,
   Type,
 } from "lucide-react";
 import { tagColor } from "../lib/format";
 
 /// Categorie principali della sidebar.
-export type MainKind = "all" | "images" | "files" | "text";
+export type MainKind = "all" | "images" | "files" | "text" | "groups";
+
+/// Sotto-tipo dei gruppi (per le sotto-voci di "Groups").
+export type GroupType = "image" | "files" | "text";
 
 export type Filter =
-  | { kind: MainKind; pinned?: boolean }
+  | { kind: MainKind; pinned?: boolean; groupType?: GroupType }
   | { kind: "tag"; name: string };
 
 function sameFilter(a: Filter, b: Filter): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "tag" && b.kind === "tag") return a.name === b.name;
   if (a.kind !== "tag" && b.kind !== "tag") {
-    return Boolean(a.pinned) === Boolean(b.pinned);
+    return (
+      Boolean(a.pinned) === Boolean(b.pinned) &&
+      (a.groupType ?? null) === (b.groupType ?? null)
+    );
   }
   return true;
 }
@@ -76,11 +84,14 @@ function SubItem({
   onClick,
   label,
   count,
+  icon,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   count?: number;
+  /// icona della sub-voce (default: il pin ambra usato da "Pinned").
+  icon?: React.ReactNode;
 }) {
   // 330ms = durata orizzontale (160) + delay verticale (150) + buffer
   const guide = useExitAnimation(active, 340);
@@ -112,7 +123,7 @@ function SubItem({
           />
         </>
       )}
-      <Pin className="h-3 w-3 shrink-0 text-amber-400/80" />
+      {icon ?? <Pin className="h-3 w-3 shrink-0 text-amber-400/80" />}
       <span className="flex-1 truncate text-left">{label}</span>
       {count !== undefined && (
         <span className="text-[10px] text-zinc-600">{count}</span>
@@ -161,6 +172,48 @@ function CategoryWithPinned({
           count={pinnedCount}
         />
       )}
+    </>
+  );
+}
+
+/// Voce "Groups" con sotto-voci per tipo (Images/Files/Text), mostrate solo
+/// quando la sezione è attiva. Replica lo stile di CategoryWithPinned.
+function GroupsCategory({
+  filter,
+  onSelect,
+  mainCount,
+}: {
+  filter: Filter;
+  onSelect: (f: Filter) => void;
+  mainCount: number;
+}) {
+  const sectionActive = filter.kind === "groups";
+  const gt = filter.kind === "groups" ? filter.groupType : undefined;
+  const subs: { type: GroupType; label: string; icon: React.ReactNode }[] = [
+    { type: "image", label: "Images", icon: <Image className="h-3 w-3 shrink-0 text-zinc-500" /> },
+    { type: "files", label: "Files", icon: <FileText className="h-3 w-3 shrink-0 text-zinc-500" /> },
+    { type: "text", label: "Text", icon: <Type className="h-3 w-3 shrink-0 text-zinc-500" /> },
+  ];
+  return (
+    <>
+      <Item
+        active={sectionActive && !gt}
+        sectionActive={sectionActive}
+        onClick={() => onSelect({ kind: "groups" })}
+        icon={<Boxes className="h-4 w-4" />}
+        label="Groups"
+        count={mainCount}
+      />
+      {sectionActive &&
+        subs.map((s) => (
+          <SubItem
+            key={s.type}
+            active={gt === s.type}
+            onClick={() => onSelect({ kind: "groups", groupType: s.type })}
+            label={s.label}
+            icon={s.icon}
+          />
+        ))}
     </>
   );
 }
@@ -306,13 +359,19 @@ function TagRow({
           : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
       }`}
     >
-      <input
-        type="color"
-        value={color}
-        onChange={(e) => onSetColor(e.target.value)}
-        title="Scegli un colore"
-        className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full"
-      />
+      {/* a riposo: icona tag colorata (indicatore, non cliccabile). Quando il
+          tag è selezionato l'icona lascia il posto al color-picker. */}
+      {active ? (
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => onSetColor(e.target.value)}
+          title="Scegli un colore"
+          className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full"
+        />
+      ) : (
+        <Tag className="h-3.5 w-3.5 shrink-0" style={{ color }} />
+      )}
       {editing ? (
         <input
           autoFocus
@@ -347,19 +406,19 @@ function TagRow({
           <span className="shrink-0 text-xs text-zinc-500">{count}</span>
         </button>
       )}
-      <button
-        onClick={onTogglePinned}
-        title={pinned ? "Rimuovi dai tag fissati" : "Fissa il tag"}
-        className={`shrink-0 transition-opacity ${
-          pinned
-            ? "text-amber-400"
-            : "text-zinc-600 opacity-0 hover:text-zinc-300 group-hover:opacity-100"
-        }`}
-      >
-        <Star
-          className={`h-3.5 w-3.5 ${pinned ? "fill-amber-400" : ""}`}
-        />
-      </button>
+      {/* stella: mostrata se il tag è pinnato (per indicarne lo stato) o quando
+          è selezionato (per poterlo fissare/sfissare). */}
+      {(active || pinned) && (
+        <button
+          onClick={onTogglePinned}
+          title={pinned ? "Rimuovi dai tag fissati" : "Fissa il tag"}
+          className={`shrink-0 ${
+            pinned ? "text-amber-400" : "text-zinc-500 hover:text-zinc-200"
+          }`}
+        >
+          <Star className={`h-3.5 w-3.5 ${pinned ? "fill-amber-400" : ""}`} />
+        </button>
+      )}
     </div>
   );
 }
@@ -371,6 +430,7 @@ export function Sidebar({
   imageCount,
   fileCount,
   textCount,
+  groupCount,
   totalCount,
   pinnedAllCount,
   pinnedImageCount,
@@ -386,6 +446,7 @@ export function Sidebar({
   imageCount: number;
   fileCount: number;
   textCount: number;
+  groupCount: number;
   totalCount: number;
   pinnedAllCount: number;
   pinnedImageCount: number;
@@ -529,6 +590,13 @@ export function Sidebar({
                 mainCount={textCount}
                 pinnedCount={pinnedTextCount}
               />
+              {groupCount > 0 && (
+                <GroupsCategory
+                  filter={filter}
+                  onSelect={onSelect}
+                  mainCount={groupCount}
+                />
+              )}
             </nav>
 
             <div

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ClipboardList } from "lucide-react";
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
@@ -47,6 +47,8 @@ function SortableCard({
     transition,
     isDragging,
   } = useSortable({ id });
+  // droppable extra per ricevere il merge da una card non pinnata trascinata
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `card:${id}` });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -57,9 +59,14 @@ function SortableCard({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        setDropRef(el);
+      }}
       style={style}
-      className="cursor-grab active:cursor-grabbing select-none"
+      className={`cursor-grab select-none rounded-xl active:cursor-grabbing ${
+        isOver ? "ring-2 ring-emerald-500/70" : ""
+      }`}
       {...attributes}
       {...listeners}
     >
@@ -68,9 +75,9 @@ function SortableCard({
   );
 }
 
-/// Wrapper draggable per le card non pinnate (usa dnd-kit/core).
-/// Serve solo a trascinare la clip su un tag della sidebar; come per le
-/// pinnate il drag parte dopo 8px, così un click breve resta un click.
+/// Wrapper per le card non pinnate: draggable (per trascinarle su un tag o
+/// su un'altra card per il merge) E droppable (per essere bersaglio di un
+/// merge). Il drag parte dopo 8px, così un click breve resta un click.
 function DraggableCard({
   id,
   children,
@@ -79,11 +86,18 @@ function DraggableCard({
   children: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  // droppable separato per ricevere il merge da un'altra card non pinnata
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `card:${id}` });
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        setDropRef(el);
+      }}
       style={{ opacity: isDragging ? 0.4 : 1 }}
-      className="cursor-grab active:cursor-grabbing select-none"
+      className={`cursor-grab select-none rounded-xl active:cursor-grabbing ${
+        isOver ? "ring-2 ring-emerald-500/70" : ""
+      }`}
       {...attributes}
       {...listeners}
     >
@@ -117,6 +131,7 @@ export function ClipList({
   onCopyImageAsFile,
   onQuickOpen,
   onTransform,
+  onOpenGroup,
   onPopoverOpenChange,
   highlightQuery,
   grouped = true,
@@ -146,6 +161,7 @@ export function ClipList({
   onReveal: (path: string) => void;
   onCopyImageAsFile: (id: number) => void;
   onQuickOpen: (clip: Clip) => void;
+  onOpenGroup: (clip: Clip) => void;
   onTransform: (id: number, transform: string) => void;
   onPopoverOpenChange: (open: boolean) => void;
   highlightQuery: string;
@@ -244,7 +260,9 @@ export function ClipList({
                 clip={clip}
                 selected={i === selectedIndex}
                 copied={clip.id === copiedId}
-                keyHint={i < 9 ? i + 1 : undefined}
+                keyHint={
+                  i < 9 && clip.content_type !== "group" ? i + 1 : undefined
+                }
                 selectedForBulk={selectedIds.has(clip.id)}
                 onSelect={() => onSelect(i)}
                 colorOf={colorOf}
@@ -260,6 +278,7 @@ export function ClipList({
                 onReveal={onReveal}
                 onCopyImageAsFile={onCopyImageAsFile}
                 onQuickOpen={onQuickOpen}
+                onOpenGroup={onOpenGroup}
                 onTransform={onTransform}
                 onPopoverOpenChange={onPopoverOpenChange}
                 selectModifier={selectModifier}

@@ -105,9 +105,12 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ **History limit default 200 → 5000** — `DEFAULT_MAX_HISTORY` and `list_clips`' `DEFAULT_LIMIT` (now points at it, so the UI loads everything kept, not just 200). Existing user-set values are preserved
 - ✅ **Syntax highlighting** for code clips — `CodeBlock` (highlight.js "common" bundle + github-dark theme) on clips tagged "Code", shown when no search query is active (avoids clashing with the yellow match highlight). hljs output is escaped, no XSS from clipboard content
 
+- ✅ **Merge clips by drag (groups)** — drag a non-pinned card onto another same-type card → confirm popup → they fuse into a "group" card. New `clip_items` table (one group → N items), `content_type='group'`, `merge_clips` (transactional, inherits target's pin, unites tags). Group card shows an aggregate preview (thumbnail grid for images, compact list for text/files); click opens a detail view with per-item copy and editable labels on text items; image items open a lightbox. Sidebar "Groups" section with Images/Files/Text sub-filters. Export/Import v2 serializes group items (images inlined b64). Group PNGs cleaned up on delete; startup orphan cleanup covers them too.
+
 ### Next candidates (not yet done)
-- **Merge clips by drag** — drag an image onto another image (or file onto file) to combine them into one card sharing tags; text would need a defined join behavior. Deferred from the drag-to-tag work: needs a new multi-content data model and conflicts with pinned reorder — wants dedicated design.
 - **List virtualization** — deferred: history default is now 5000, but we ship without virtualization first; add it only if large histories actually lag (would need to coexist with date groups, drag-to-tag, animations).
+- **Multi-copy in group detail** — select several items and copy them together; deferred because the Windows clipboard only holds one image.
+- **prune_to_limit PNG cleanup** — pruned group PNGs are only removed by the startup orphan sweep, not immediately. Minor (temporary disk only).
 - Code signing (paid certificate → removes SmartScreen warning on install)
 
 ### Dropped (cost/benefit on a personal app)

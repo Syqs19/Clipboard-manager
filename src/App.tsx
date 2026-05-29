@@ -30,9 +30,14 @@ import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
 import { Settings } from "./components/Settings";
 import { ImagePreview } from "./components/ImagePreview";
+import { GroupDetail } from "./components/GroupDetail";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
+
+/// Vero mentre si trascina una card PINNATA: in quel caso il drag è un
+/// riordino del sortable, quindi il detector ignora i bersagli `card:` (merge).
+let draggingPinned = false;
 
 /// Collision detection ibrida.
 /// Per i tag: la hitbox è il rettangolo dell'OVERLAY reale (dove la card è
@@ -44,11 +49,16 @@ import { Onboarding } from "./components/Onboarding";
 /// Per il riordino card: closestCenter come prima (tag esclusi dai candidati).
 const collisionDetection: CollisionDetection = (args) => {
   const { pointerCoordinates, droppableContainers } = args;
-  const tags = droppableContainers.filter((c) =>
-    String(c.id).startsWith("tag:"),
-  );
+  // bersagli "precisi" (tag della sidebar + card per il merge): si attivano
+  // solo se l'overlay li interseca davvero. Trascinando una pinnata (riordino)
+  // i bersagli `card:` vengono ignorati, così il sortable non viene disturbato.
+  const precise = droppableContainers.filter((c) => {
+    const id = String(c.id);
+    if (id.startsWith("tag:")) return true;
+    return id.startsWith("card:") && !draggingPinned;
+  });
 
-  if (pointerCoordinates && tags.length > 0) {
+  if (pointerCoordinates && precise.length > 0) {
     // hitbox a dimensione fissa centrata sul cursore (≈ overlay). Non usiamo
     // collisionRect: per le immagini l'overlay parte a 0×0 finché il blob non
     // è caricato, e la hitbox risulterebbe un punto → mai intersezione.
@@ -57,7 +67,7 @@ const collisionDetection: CollisionDetection = (args) => {
     const ox = pointerCoordinates.x - w / 2;
     const oy = pointerCoordinates.y - h / 2;
     let best: { id: string | number; area: number } | null = null;
-    for (const c of tags) {
+    for (const c of precise) {
       const r = c.rect.current;
       if (!r) continue;
       const ix = Math.max(0, Math.min(ox + w, r.left + r.width) - Math.max(ox, r.left));
@@ -68,12 +78,14 @@ const collisionDetection: CollisionDetection = (args) => {
     if (best) return [{ id: best.id }];
   }
 
-  // niente tag intersecato → riordino card, escludendo i tag dai candidati
+  // nessun bersaglio preciso → riordino dei pinnati (sortable, id numerici),
+  // escludendo i bersagli precisi dai candidati
   return closestCenter({
     ...args,
-    droppableContainers: droppableContainers.filter(
-      (c) => !String(c.id).startsWith("tag:"),
-    ),
+    droppableContainers: droppableContainers.filter((c) => {
+      const id = String(c.id);
+      return !id.startsWith("tag:") && !id.startsWith("card:");
+    }),
   });
 };
 
@@ -168,6 +180,12 @@ function App() {
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
+  const [groupClip, setGroupClip] = useState<Clip | null>(null);
+  // conferma al drop di una card su un'altra dello stesso tipo
+  const [mergePrompt, setMergePrompt] = useState<{
+    sourceId: number;
+    targetId: number;
+  } | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [hotkey, setHotkey] = useState("Ctrl+Shift+V");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -227,14 +245,15 @@ function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (previewClip) setPreviewClip(null);
+      if (groupClip) setGroupClip(null);
+      else if (previewClip) setPreviewClip(null);
       else if (settingsOpen) setSettingsOpen(false);
       else if (selectedIdsRef.current.size > 0) clearSelection();
       else getCurrentWindow().hide();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewClip, settingsOpen, clearSelection]);
+  }, [groupClip, previewClip, settingsOpen, clearSelection]);
 
   // si sottoscrive una sola volta agli eventi del watcher
   const reloadRef = useRef(reload);
@@ -304,14 +323,21 @@ function App() {
         const c = list[selRef.current];
         if (c) {
           e.preventDefault();
-          api.copyClip(c.id); // solo copia, la finestra resta aperta
-          flashRef.current(c.id);
+          // i gruppi non si copiano: Enter apre la vista dettaglio
+          if (c.content_type === "group") {
+            setGroupClip(c);
+          } else {
+            // solo copia, la finestra resta aperta
+            api.copyClip(c.id).catch(() => {});
+            flashRef.current(c.id);
+          }
         }
       } else if (/^[1-9]$/.test(e.key) && !typing) {
         const c = list[parseInt(e.key, 10) - 1];
-        if (c) {
+        // i gruppi non hanno badge numerico e non si copiano: 1-9 li ignora
+        if (c && c.content_type !== "group") {
           e.preventDefault();
-          api.copyClip(c.id);
+          api.copyClip(c.id).catch(() => {});
           flashRef.current(c.id);
         }
       } else if (e.key === "Delete" && !typing) {
@@ -327,16 +353,26 @@ function App() {
   }, []);
 
   const isTextLike = (t: string) => t === "text" || t === "url";
+  // tipo "effettivo" di un clip: per i gruppi è il tipo dei loro elementi, così
+  // un gruppo di immagini appare anche in "Images", uno di testi in "Text", ecc.
+  const effectiveType = (c: Clip) =>
+    c.content_type === "group" ? c.items?.[0]?.item_type ?? "text" : c.content_type;
   const typeMatches = (c: Clip, kind: Filter["kind"]) => {
     switch (kind) {
       case "all":
         return true;
       case "images":
-        return c.content_type === "image";
+        return effectiveType(c) === "image";
       case "files":
-        return c.content_type === "files";
+        return effectiveType(c) === "files";
       case "text":
-        return isTextLike(c.content_type);
+        return isTextLike(effectiveType(c));
+      case "groups":
+        if (c.content_type !== "group") return false;
+        // sotto-voce per tipo: filtra i gruppi per il tipo dei loro elementi
+        return filter.kind === "groups" && filter.groupType
+          ? (c.items?.[0]?.item_type ?? "text") === filter.groupType
+          : true;
       case "tag":
         return false; // gestito a parte
     }
@@ -350,28 +386,29 @@ function App() {
   });
   // count categoria principale = tutto del tipo; sub-voce = solo fissati
   const allCount = clips.length;
-  const imageCount = clips.filter((c) => c.content_type === "image").length;
-  const fileCount = clips.filter((c) => c.content_type === "files").length;
-  const textCount = clips.filter((c) => isTextLike(c.content_type)).length;
+  const imageCount = clips.filter((c) => effectiveType(c) === "image").length;
+  const fileCount = clips.filter((c) => effectiveType(c) === "files").length;
+  const textCount = clips.filter((c) => isTextLike(effectiveType(c))).length;
+  const groupCount = clips.filter((c) => c.content_type === "group").length;
   const pinnedAllCount = clips.filter((c) => c.pinned).length;
   const pinnedImageCount = clips.filter(
-    (c) => c.content_type === "image" && c.pinned,
+    (c) => effectiveType(c) === "image" && c.pinned,
   ).length;
   const pinnedFileCount = clips.filter(
-    (c) => c.content_type === "files" && c.pinned,
+    (c) => effectiveType(c) === "files" && c.pinned,
   ).length;
   const pinnedTextCount = clips.filter(
-    (c) => isTextLike(c.content_type) && c.pinned,
+    (c) => isTextLike(effectiveType(c)) && c.pinned,
   ).length;
 
   // selezione corrente (per la navigazione da tastiera)
   const sel = visible.length ? Math.min(selectedIndex, visible.length - 1) : 0;
   visibleRef.current = visible;
   selRef.current = sel;
-  modalRef.current = settingsOpen || previewClip !== null;
+  modalRef.current = settingsOpen || previewClip !== null || groupClip !== null;
 
   const handleCopy = (id: number, asPlain = false) => {
-    api.copyClip(id, asPlain);
+    api.copyClip(id, asPlain).catch((e) => notify(`Couldn't copy: ${e}`, "error"));
     flashCopied(id);
   };
   const handleCopyImageAsFile = async (id: number) => {
@@ -549,7 +586,10 @@ function App() {
   } | null>(null);
 
   const onDragStart = (event: DragStartEvent) => {
-    setDraggingId(event.active.id as number);
+    const id = event.active.id as number;
+    setDraggingId(id);
+    // se trascino una pinnata è un riordino: il detector ignora i merge target
+    draggingPinned = clips.find((c) => c.id === id)?.pinned ?? false;
     // nascondi il cursore mentre trascini: la card stessa fa da puntatore
     document.body.classList.add("dragging-clip");
     window.addEventListener("pointermove", trackPointer);
@@ -560,6 +600,7 @@ function App() {
   const onDragEnd = (event: DragEndEvent) => {
     const clip = draggingClip;
     setDraggingId(null);
+    draggingPinned = false;
     document.body.classList.remove("dragging-clip");
     window.removeEventListener("pointermove", trackPointer);
     const { active, over } = event;
@@ -594,7 +635,21 @@ function App() {
       }
       return;
     }
-    // altrimenti drop su un'altra card → riordino dei pinnati
+    // drop su una card non pinnata (bersaglio merge, id "card:N")
+    if (typeof over.id === "string" && over.id.startsWith("card:")) {
+      const targetId = Number(over.id.slice(5));
+      if (targetId === activeId) return;
+      const source = clips.find((c) => c.id === activeId);
+      const target = clips.find((c) => c.id === targetId);
+      if (!source || !target) return;
+      // merge se la SORGENTE non è pinnata (così non disturba il sortable) e i
+      // tipi effettivi coincidono. Il bersaglio può essere pinnato o no.
+      if (!source.pinned && effectiveType(source) === effectiveType(target)) {
+        setMergePrompt({ sourceId: activeId, targetId });
+      }
+      return;
+    }
+    // drop su un'altra card pinnata (sortable, id numerico) → riordino
     if (active.id !== over.id) reorderRef.current(activeId, over.id as number);
   };
 
@@ -613,6 +668,7 @@ function App() {
         imageCount={imageCount}
         fileCount={fileCount}
         textCount={textCount}
+        groupCount={groupCount}
         totalCount={allCount}
         pinnedAllCount={pinnedAllCount}
         pinnedImageCount={pinnedImageCount}
@@ -681,6 +737,7 @@ function App() {
             onCopyImageAsFile={handleCopyImageAsFile}
             onQuickOpen={handleQuickOpen}
             onTransform={handleTransform}
+            onOpenGroup={setGroupClip}
             onPopoverOpenChange={(open) => {
               popoverOpenRef.current = open;
             }}
@@ -729,6 +786,48 @@ function App() {
         onCopy={handleCopy}
         onCopyAsFile={handleCopyImageAsFile}
       />
+
+      <GroupDetail clip={groupClip} onClose={() => setGroupClip(null)} />
+
+      {/* conferma merge al drop di una card su un'altra dello stesso tipo */}
+      {mergePrompt && (
+        <div
+          onClick={() => setMergePrompt(null)}
+          className="anim-fade-in fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-6"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="anim-scale-in w-full max-w-xs rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
+          >
+            <p className="text-sm text-zinc-200">
+              Merge these two clips into a group?
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => setMergePrompt(null)}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const { sourceId, targetId } = mergePrompt;
+                  setMergePrompt(null);
+                  try {
+                    await api.mergeClips(sourceId, targetId);
+                    await reload();
+                  } catch (e) {
+                    notify(`Couldn't merge: ${e}`, "error");
+                  }
+                }}
+                className="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-400"
+              >
+                Merge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Onboarding
         open={onboardingOpen}
