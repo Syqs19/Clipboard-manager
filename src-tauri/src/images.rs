@@ -13,7 +13,7 @@ use crate::crypto::{
 };
 
 /// Codifica RGBA8 → byte PNG in memoria (nessun I/O).
-fn encode_rgba_to_png_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+pub fn encode_rgba_to_png_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     let mut out: Vec<u8> = Vec::new();
     {
         let mut encoder = png::Encoder::new(BufWriter::new(&mut out), width, height);
@@ -75,7 +75,14 @@ pub fn save_rgba_png(
     key: &MasterKey,
 ) -> Result<(), String> {
     let png_bytes = encode_rgba_to_png_bytes(width, height, rgba)?;
-    let blob = encrypt_bytes(key, &png_bytes)?;
+    save_png_bytes(path, &png_bytes, key)
+}
+
+/// Cifra e scrive su disco byte PNG già codificati. Utile quando il PNG è
+/// stato codificato a monte (es. per misurarne il peso prima di decidere se
+/// salvarlo) ed evita una doppia codifica.
+pub fn save_png_bytes(path: &Path, png_bytes: &[u8], key: &MasterKey) -> Result<(), String> {
+    let blob = encrypt_bytes(key, png_bytes)?;
     std::fs::write(path, blob).map_err(|e| e.to_string())
 }
 

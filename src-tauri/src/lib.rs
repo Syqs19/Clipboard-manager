@@ -154,6 +154,14 @@ pub fn run() {
                 .and_then(|s| s.get("ocrEnabled").and_then(|v| v.as_bool()))
                 .unwrap_or(true);
 
+            // Tetto dimensione immagini (byte del PNG): 0 = nessun limite (default)
+            let max_image_bytes_val = app
+                .store("settings.json")
+                .ok()
+                .and_then(|s| s.get("maxImageBytes").and_then(|v| v.as_i64()))
+                .unwrap_or(0)
+                .max(0);
+
             let runtime = settings::RuntimeState {
                 paused: Arc::new(AtomicBool::new(false)),
                 max_history: Arc::new(AtomicI64::new(max_history)),
@@ -162,6 +170,7 @@ pub fn run() {
                 sensitive_ttl_minutes: Arc::new(AtomicI64::new(sensitive_ttl.max(0))),
                 sensitive_kinds: Arc::new(RwLock::new(sensitive_kinds_set)),
                 ocr_enabled: Arc::new(AtomicBool::new(ocr_enabled_val)),
+                max_image_bytes: Arc::new(AtomicI64::new(max_image_bytes_val)),
             };
             let paused = runtime.paused.clone();
             let max_hist = runtime.max_history.clone();
@@ -171,6 +180,7 @@ pub fn run() {
             let kinds_for_sweep = runtime.sensitive_kinds.clone();
             let ocr_for_watcher = runtime.ocr_enabled.clone();
             let ocr_for_backfill = runtime.ocr_enabled.clone();
+            let max_image_bytes = runtime.max_image_bytes.clone();
 
             // segnale "self-write": condiviso fra commands (writer) e watcher
             // (consumer) per evitare l'auto-bump quando l'app copia una clip.
@@ -233,6 +243,7 @@ pub fn run() {
                 dont_save,
                 kinds_for_watcher,
                 ocr_for_watcher,
+                max_image_bytes,
                 images_dir,
             );
 
@@ -340,6 +351,7 @@ pub fn run() {
             commands::apply_sensitive_ttl,
             commands::apply_sensitive_kinds,
             commands::apply_ocr_enabled,
+            commands::apply_max_image_bytes,
             commands::reorder_pinned,
             commands::remove_clips,
             commands::bulk_set_pinned,

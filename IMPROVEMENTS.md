@@ -100,11 +100,12 @@ Status: ☐ todo · ⏳ in progress · ✅ done
 - ✅ "Paste as" / transforms — "Copy as…" popover on text clips (UPPERCASE / lowercase / trim / slugify / pretty JSON, JSON disabled when the content isn't valid JSON) and on image clips (base64 / markdown `![](data:…)`). Pure transforms in `transforms.rs` (7 unit tests, 61 total); `copy_transformed` command reuses the self-write guard and never mutates the saved clip
 - ✅ **Color swatches** inline before every CSS color value (hex/rgb/hsl) in text clips, alongside the search highlight. Color-only clips get a "Color" tag (categorizer) instead of "Code"/"Numbers"; its sidebar dot defaults to neutral white so it never clashes with the content swatch
 - ✅ **Drag clips onto sidebar tags** to tag them — single card or multi-selection (bulk). Single shared `DndContext` in App spanning sidebar + list; preserves pinned reorder, click-to-copy, multi-select, 8px activation. Custom collision detection (overlay-rect centered on cursor) so a tag activates only when the card visually overlaps it. Overlay centered on cursor + cursor hidden, real image thumbnail / file basename / stacked-card preview with count badge. Tall images clipped to a fixed max-height in the card. Animations: tag glow pulse on hover, confirm pop, ghost flying into the tag, delayed chip pop — all respect reduced-motion
+- ✅ **Image size limit** — optional cap (off by default) in Settings → Security. Measured on the compressed PNG size (MB); images over the limit are skipped (they stay on the Windows clipboard). New `max_image_bytes` atomic + `apply_max_image_bytes` command; `images::save_png_bytes` avoids re-encoding
+- ✅ **Responsive Settings dialog** — fixed-height scrollable body so the modal stays put when switching tabs; tabs wrap instead of overflowing; modal capped at `max-h-[85vh]`
 
 ### Next candidates (not yet done)
 - **Syntax highlighting** for code clips in the preview (frontend-only polish).
 - **Merge clips by drag** — drag an image onto another image (or file onto file) to combine them into one card sharing tags; text would need a defined join behavior. Deferred from the drag-to-tag work: needs a new multi-content data model and conflicts with pinned reorder — wants dedicated design.
-- **Image size limit** — optional cap so a huge screenshot doesn't bloat the encrypted store (skip/limit images over N MB).
 - **List virtualization** — only worth it if the history limit is raised to thousands (with the default cap it isn't needed).
 - Code signing (paid certificate → removes SmartScreen warning on install)
 

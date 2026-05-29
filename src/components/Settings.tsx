@@ -130,6 +130,10 @@ export function Settings({
     ...SENSITIVE_KINDS,
   ]);
   const [ocrEnabled, setOcrEnabled] = useState(true);
+  // limite dimensione immagini: attivo (on/off) + soglia in MB. Lo store tiene
+  // i byte (maxImageBytes, 0 = nessun limite); qui mostriamo i MB all'utente.
+  const [imageLimitOn, setImageLimitOn] = useState(false);
+  const [imageLimitMb, setImageLimitMb] = useState(10);
   const [selectMod, setSelectMod] = useState<SelectModifier>("ctrl");
   const [tab, setTab] = useState<
     "general" | "security" | "stats" | "about" | "reset"
@@ -157,6 +161,9 @@ export function Settings({
         ),
       );
       setOcrEnabled((await store.get<boolean>("ocrEnabled")) ?? true);
+      const bytes = (await store.get<number>("maxImageBytes")) ?? 0;
+      setImageLimitOn(bytes > 0);
+      if (bytes > 0) setImageLimitMb(Math.round(bytes / (1024 * 1024)));
       const m = (await store.get<string>("multiSelectModifier")) ?? "ctrl";
       if ((SELECT_MODIFIERS as readonly string[]).includes(m)) {
         setSelectMod(m as SelectModifier);
@@ -291,6 +298,21 @@ export function Settings({
     await save("ocrEnabled", v);
     await api.applyOcrEnabled(v);
   };
+  // applica il limite in byte: 0 se disattivato, altrimenti mb × 1 MiB
+  const applyImageLimit = async (on: boolean, mb: number) => {
+    const bytes = on ? Math.round(mb * 1024 * 1024) : 0;
+    await save("maxImageBytes", bytes);
+    await api.applyMaxImageBytes(bytes);
+  };
+  const onImageLimitOn = async (v: boolean) => {
+    setImageLimitOn(v);
+    await applyImageLimit(v, imageLimitMb);
+  };
+  const onImageLimitMb = async (v: number) => {
+    if (!Number.isFinite(v) || v < 1) return;
+    setImageLimitMb(v);
+    if (imageLimitOn) await applyImageLimit(true, v);
+  };
   const onSelectMod = async (m: SelectModifier) => {
     setSelectMod(m);
     await save("multiSelectModifier", m);
@@ -314,11 +336,11 @@ export function Settings({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl ${
+        className={`flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl ${
           exit.exiting ? "anim-scale-out" : "anim-scale-in"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
           <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
           <button
             onClick={close}
@@ -328,7 +350,7 @@ export function Settings({
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-zinc-800 px-3 pt-2">
+        <div className="flex shrink-0 flex-wrap gap-1 border-b border-zinc-800 px-3 pt-2">
           {(
             [
               ["general", "General"],
@@ -341,7 +363,7 @@ export function Settings({
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`relative rounded-t-md px-3 py-2 text-sm transition-colors ${
+              className={`relative shrink-0 rounded-t-md px-3 py-2 text-sm transition-colors ${
                 tab === id
                   ? "text-zinc-100"
                   : "text-zinc-500 hover:text-zinc-300"
@@ -355,7 +377,7 @@ export function Settings({
           ))}
         </div>
 
-        <div key={tab} className="anim-fade-in min-h-[22rem] divide-y divide-zinc-800 px-5">
+        <div key={tab} className="anim-fade-in h-[26rem] divide-y divide-zinc-800 overflow-y-auto px-5">
           {tab === "general" && (
             <>
               <Row
@@ -463,6 +485,29 @@ export function Settings({
                 hint="Search inside screenshots. Recognized text is stored in the encrypted DB."
               >
                 <Toggle checked={ocrEnabled} onChange={onOcrEnabled} />
+              </Row>
+
+              <Row
+                title="Limit image size"
+                hint="Skip images larger than the limit (they stay on the Windows clipboard). Keeps the encrypted store from bloating."
+              >
+                <div className="flex items-center gap-2">
+                  {imageLimitOn && (
+                    <>
+                      <input
+                        type="number"
+                        min={1}
+                        value={imageLimitMb}
+                        onChange={(e) =>
+                          onImageLimitMb(parseInt(e.target.value, 10))
+                        }
+                        className="w-16 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                      />
+                      <span className="text-sm text-zinc-400">MB</span>
+                    </>
+                  )}
+                  <Toggle checked={imageLimitOn} onChange={onImageLimitOn} />
+                </div>
               </Row>
 
               <div className="py-3">

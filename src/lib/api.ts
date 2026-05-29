@@ -72,6 +72,8 @@ export const api = {
     invoke<void>("apply_sensitive_kinds", { kinds }),
   applyOcrEnabled: (value: boolean) =>
     invoke<void>("apply_ocr_enabled", { value }),
+  applyMaxImageBytes: (bytes: number) =>
+    invoke<void>("apply_max_image_bytes", { bytes }),
   exportHistory: (path: string) =>
     invoke<number>("export_history", { path }),
   importHistory: (path: string, mode: "merge" | "replace") =>

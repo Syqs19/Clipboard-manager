@@ -769,6 +769,12 @@ pub fn apply_ocr_enabled(state: State<RuntimeState>, value: bool) {
     state.ocr_enabled.store(value, Ordering::Relaxed);
 }
 
+/// Tetto massimo (in byte del PNG) per salvare un'immagine; 0 = nessun limite.
+#[tauri::command]
+pub fn apply_max_image_bytes(state: State<RuntimeState>, bytes: i64) {
+    state.max_image_bytes.store(bytes.max(0), Ordering::Relaxed);
+}
+
 /// Sostituisce il set di categorie sensibili attive (subset di "email"/"iban"/"card"/"token").
 #[tauri::command]
 pub fn apply_sensitive_kinds(state: State<RuntimeState>, kinds: Vec<String>) {

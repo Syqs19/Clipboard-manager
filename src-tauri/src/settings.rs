@@ -48,4 +48,7 @@ pub struct RuntimeState {
     pub sensitive_kinds: Arc<RwLock<HashSet<String>>>,
     /// Se true, le immagini catturate vengono indicizzate via OCR (testo cercabile).
     pub ocr_enabled: Arc<AtomicBool>,
+    /// Tetto massimo (in byte del PNG compresso) per salvare un'immagine in
+    /// cronologia. 0 = nessun limite. Le immagini oltre soglia vengono saltate.
+    pub max_image_bytes: Arc<AtomicI64>,
 }

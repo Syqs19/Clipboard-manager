@@ -26,6 +26,7 @@ struct Handler {
     dont_save_sensitive: Arc<AtomicBool>,
     sensitive_kinds: Arc<RwLock<HashSet<String>>>,
     ocr_enabled: Arc<AtomicBool>,
+    max_image_bytes: Arc<AtomicI64>,
     images_dir: PathBuf,
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
@@ -214,13 +215,18 @@ impl Handler {
 
         let path = self.images_dir.join(format!("{hash}.png"));
         if !path.exists() {
-            images::save_rgba_png(
-                &path,
+            // codifica il PNG e, se è impostato un tetto, salta le immagini che
+            // lo superano (restano comunque nella clipboard di Windows).
+            let png = images::encode_rgba_to_png_bytes(
                 img.width as u32,
                 img.height as u32,
                 &img.bytes,
-                &self.key,
             )?;
+            let limit = self.max_image_bytes.load(Ordering::Relaxed);
+            if limit > 0 && png.len() as i64 > limit {
+                return Ok(());
+            }
+            images::save_png_bytes(&path, &png, &self.key)?;
         }
         // genera la thumbnail (200px lato lungo) se manca
         let thumb = images::thumb_path_for(&path);
@@ -317,6 +323,7 @@ pub fn start(
     dont_save_sensitive: Arc<AtomicBool>,
     sensitive_kinds: Arc<RwLock<HashSet<String>>>,
     ocr_enabled: Arc<AtomicBool>,
+    max_image_bytes: Arc<AtomicI64>,
     images_dir: PathBuf,
 ) {
     std::thread::spawn(move || {
@@ -336,6 +343,7 @@ pub fn start(
             dont_save_sensitive,
             sensitive_kinds,
             ocr_enabled,
+            max_image_bytes,
             images_dir,
             clipboard,
             last_hash: None,
