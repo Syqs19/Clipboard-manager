@@ -46,4 +46,6 @@ pub struct RuntimeState {
     pub sensitive_ttl_minutes: Arc<AtomicI64>,
     /// Categorie sensibili per cui valgono "non salvare" e TTL (subset di ALL_SENSITIVE_KINDS).
     pub sensitive_kinds: Arc<RwLock<HashSet<String>>>,
+    /// Se true, le immagini catturate vengono indicizzate via OCR (testo cercabile).
+    pub ocr_enabled: Arc<AtomicBool>,
 }

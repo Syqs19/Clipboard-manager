@@ -129,6 +129,7 @@ export function Settings({
   const [sensitiveKinds, setSensitiveKinds] = useState<SensitiveKind[]>([
     ...SENSITIVE_KINDS,
   ]);
+  const [ocrEnabled, setOcrEnabled] = useState(true);
   const [selectMod, setSelectMod] = useState<SelectModifier>("ctrl");
   const [tab, setTab] = useState<
     "general" | "security" | "stats" | "about" | "reset"
@@ -155,6 +156,7 @@ export function Settings({
           (SENSITIVE_KINDS as readonly string[]).includes(k),
         ),
       );
+      setOcrEnabled((await store.get<boolean>("ocrEnabled")) ?? true);
       const m = (await store.get<string>("multiSelectModifier")) ?? "ctrl";
       if ((SELECT_MODIFIERS as readonly string[]).includes(m)) {
         setSelectMod(m as SelectModifier);
@@ -283,6 +285,11 @@ export function Settings({
     setSensitiveTtl(v);
     await save("sensitiveTtlMinutes", v);
     await api.applySensitiveTtl(v);
+  };
+  const onOcrEnabled = async (v: boolean) => {
+    setOcrEnabled(v);
+    await save("ocrEnabled", v);
+    await api.applyOcrEnabled(v);
   };
   const onSelectMod = async (m: SelectModifier) => {
     setSelectMod(m);
@@ -449,6 +456,13 @@ export function Settings({
                   }
                   className="w-20 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-right text-sm text-zinc-100 outline-none focus:border-zinc-600"
                 />
+              </Row>
+
+              <Row
+                title="Index text inside images (OCR)"
+                hint="Search inside screenshots. Recognized text is stored in the encrypted DB."
+              >
+                <Toggle checked={ocrEnabled} onChange={onOcrEnabled} />
               </Row>
 
               <div className="py-3">

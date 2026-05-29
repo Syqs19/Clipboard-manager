@@ -65,6 +65,8 @@ export const api = {
     invoke<void>("apply_sensitive_ttl", { minutes }),
   applySensitiveKinds: (kinds: string[]) =>
     invoke<void>("apply_sensitive_kinds", { kinds }),
+  applyOcrEnabled: (value: boolean) =>
+    invoke<void>("apply_ocr_enabled", { value }),
   exportHistory: (path: string) =>
     invoke<number>("export_history", { path }),
   importHistory: (path: string, mode: "merge" | "replace") =>

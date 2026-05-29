@@ -680,6 +680,12 @@ pub fn apply_sensitive_ttl(state: State<RuntimeState>, minutes: i64) {
     state.sensitive_ttl_minutes.store(minutes.max(0), Ordering::Relaxed);
 }
 
+/// Attiva/disattiva l'indicizzazione OCR delle immagini.
+#[tauri::command]
+pub fn apply_ocr_enabled(state: State<RuntimeState>, value: bool) {
+    state.ocr_enabled.store(value, Ordering::Relaxed);
+}
+
 /// Sostituisce il set di categorie sensibili attive (subset di "email"/"iban"/"card"/"token").
 #[tauri::command]
 pub fn apply_sensitive_kinds(state: State<RuntimeState>, kinds: Vec<String>) {

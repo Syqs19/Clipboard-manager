@@ -25,6 +25,7 @@ struct Handler {
     max_history: Arc<AtomicI64>,
     dont_save_sensitive: Arc<AtomicBool>,
     sensitive_kinds: Arc<RwLock<HashSet<String>>>,
+    ocr_enabled: Arc<AtomicBool>,
     images_dir: PathBuf,
     clipboard: arboard::Clipboard,
     /// Hash dell'ultima cattura, per non rielaborare lo stesso evento due volte.
@@ -241,6 +242,26 @@ impl Handler {
         };
         // niente tag automatico: le immagini hanno la loro sezione dedicata
         let id = self.db.insert_or_bump_clip(&new).map_err(|e| e.to_string())?;
+
+        // OCR in background (non blocca il watcher): rende cercabile il testo
+        // dentro lo screenshot. Gira su un thread dedicato col COM inizializzato.
+        if self.ocr_enabled.load(Ordering::Relaxed) {
+            let db = self.db.clone();
+            let app = self.app.clone();
+            let w = img.width as u32;
+            let h = img.height as u32;
+            let bytes = img.bytes.to_vec();
+            std::thread::spawn(move || {
+                crate::ocr::init_thread();
+                if let Ok(text) = crate::ocr::ocr_rgba(w, h, &bytes) {
+                    let t = text.trim();
+                    if !t.is_empty() && db.set_ocr_text(id, t).is_ok() {
+                        let _ = app.emit("clips-changed", id);
+                    }
+                }
+            });
+        }
+
         self.finish(id);
         Ok(())
     }
@@ -295,6 +316,7 @@ pub fn start(
     max_history: Arc<AtomicI64>,
     dont_save_sensitive: Arc<AtomicBool>,
     sensitive_kinds: Arc<RwLock<HashSet<String>>>,
+    ocr_enabled: Arc<AtomicBool>,
     images_dir: PathBuf,
 ) {
     std::thread::spawn(move || {
@@ -313,6 +335,7 @@ pub fn start(
             max_history,
             dont_save_sensitive,
             sensitive_kinds,
+            ocr_enabled,
             images_dir,
             clipboard,
             last_hash: None,

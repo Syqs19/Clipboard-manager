@@ -4,6 +4,7 @@ mod commands;
 mod crypto;
 mod db;
 mod images;
+mod ocr;
 mod settings;
 mod tray;
 mod win_clipboard;
@@ -145,6 +146,13 @@ pub fn run() {
                 ),
             };
 
+            // OCR delle immagini: attivo di default, disattivabile da Settings
+            let ocr_enabled_val = app
+                .store("settings.json")
+                .ok()
+                .and_then(|s| s.get("ocrEnabled").and_then(|v| v.as_bool()))
+                .unwrap_or(true);
+
             let runtime = settings::RuntimeState {
                 paused: Arc::new(AtomicBool::new(false)),
                 max_history: Arc::new(AtomicI64::new(max_history)),
@@ -152,6 +160,7 @@ pub fn run() {
                 dont_save_sensitive: Arc::new(AtomicBool::new(dont_save_sensitive)),
                 sensitive_ttl_minutes: Arc::new(AtomicI64::new(sensitive_ttl.max(0))),
                 sensitive_kinds: Arc::new(RwLock::new(sensitive_kinds_set)),
+                ocr_enabled: Arc::new(AtomicBool::new(ocr_enabled_val)),
             };
             let paused = runtime.paused.clone();
             let max_hist = runtime.max_history.clone();
@@ -159,6 +168,8 @@ pub fn run() {
             let ttl = runtime.sensitive_ttl_minutes.clone();
             let kinds_for_watcher = runtime.sensitive_kinds.clone();
             let kinds_for_sweep = runtime.sensitive_kinds.clone();
+            let ocr_for_watcher = runtime.ocr_enabled.clone();
+            let ocr_for_backfill = runtime.ocr_enabled.clone();
 
             // segnale "self-write": condiviso fra commands (writer) e watcher
             // (consumer) per evitare l'auto-bump quando l'app copia una clip.
@@ -220,6 +231,7 @@ pub fn run() {
                 max_hist,
                 dont_save,
                 kinds_for_watcher,
+                ocr_for_watcher,
                 images_dir,
             );
 
@@ -248,6 +260,46 @@ pub fn run() {
                         }
                         Ok(_) => {}
                         Err(e) => eprintln!("[sweep] errore: {e}"),
+                    }
+                });
+            }
+
+            // backfill OCR: indicizza in background gli screenshot già in
+            // cronologia ancora privi di testo OCR (idempotente, rispetta il toggle)
+            {
+                let db_ocr = database.clone();
+                let key_ocr = master_key.clone();
+                let app_ocr = app.handle().clone();
+                std::thread::spawn(move || {
+                    if !ocr_for_backfill.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    ocr::init_thread();
+                    let pending = match db_ocr.images_needing_ocr() {
+                        Ok(v) => v,
+                        Err(_) => return,
+                    };
+                    let mut changed = false;
+                    for (id, path) in pending {
+                        if !ocr_for_backfill.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        let Ok((w, h, rgba)) =
+                            images::load_png_rgba(std::path::Path::new(&path), &key_ocr)
+                        else {
+                            continue;
+                        };
+                        if let Ok(text) = ocr::ocr_rgba(w, h, &rgba) {
+                            // salvo anche la stringa vuota: così le immagini senza
+                            // testo non vengono ri-processate ad ogni avvio
+                            let _ = db_ocr.set_ocr_text(id, text.trim());
+                            if !text.trim().is_empty() {
+                                changed = true;
+                            }
+                        }
+                    }
+                    if changed {
+                        let _ = app_ocr.emit("clips-changed", 0_i64);
                     }
                 });
             }
@@ -286,6 +338,7 @@ pub fn run() {
             commands::apply_dont_save_sensitive,
             commands::apply_sensitive_ttl,
             commands::apply_sensitive_kinds,
+            commands::apply_ocr_enabled,
             commands::reorder_pinned,
             commands::remove_clips,
             commands::bulk_set_pinned,
