@@ -1,7 +1,54 @@
 @import "tailwindcss";
 
+/* Accent della sezione attiva come TERNA di canali RGB (non rgb()): così le
+   utility Tailwind con alpha (/10, /40, /70) funzionano via color-mix e il
+   valore resta swappabile a runtime cambiando data-section sul root.
+   @theme inline è necessario perché l'utility inlinei rgb(var(--accent)/…). */
+@theme inline {
+  --color-accent: rgb(var(--accent) / 1);
+}
+
 :root {
   color-scheme: dark;
+  /* default = verde Clipboard (emerald-500); le sezioni lo sovrascrivono. */
+  --accent: 16 185 129;
+}
+
+/* Accent fisso per macro-sezione: lo swap di data-section sul root cambia
+   --accent e le proprietà colore risolte transiscono (vedi cross-fade sotto). */
+[data-section="clipboard"] {
+  --accent: 16 185 129;
+} /* emerald-500 */
+[data-section="tools"] {
+  --accent: 239 68 68;
+} /* red-500 */
+[data-section="design"] {
+  --accent: 139 92 246;
+} /* violet-500 */
+
+/* Sfondo dell'app: glow soft che VIRA col colore della sezione (legge --accent
+   dal root con data-section). Chromium/WebView2 interpola i radial-gradient che
+   differiscono solo per i colori → cross-fade morbido del colore di sfondo. */
+.app-bg {
+  background-color: #0f0f12;
+  background-image:
+    radial-gradient(140% 100% at 50% -15%, rgb(var(--accent) / 0.1) 0%, transparent 65%),
+    radial-gradient(at 90% 100%, rgb(var(--accent) / 0.05) 0%, transparent 60%);
+  transition: background 700ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-bg {
+    transition: none;
+  }
+}
+
+/* Cross-fade dell'accent al cambio sezione: --accent non è animabile, ma le
+   PROPRIETÀ colore risolte sì. Mira solo agli elementi che usano l'accent
+   (classi *accent*), per non interferire con hover/altre transizioni. */
+[data-section] [class*="accent"] {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 300ms;
+  transition-timing-function: ease;
 }
 
 html,
@@ -26,12 +73,10 @@ body.dragging-clip * {
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* Sfondo a leggero gradiente verde sottile per dare profondità senza
-     uscire dalla palette (verde + grigi scuri). */
+  /* Solo il colore base scuro: il glow colorato che vira con la sezione vive sul
+     root dell'app (.app-bg), non qui, perché il <body> è fuori dal contenitore
+     con data-section e non leggerebbe --accent. */
   background-color: #0f0f12;
-  background-image:
-    radial-gradient(at 18% 0%, rgba(16, 185, 129, 0.07) 0%, transparent 42%),
-    radial-gradient(at 90% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
   color: #e4e4e7; /* zinc-200 */
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -123,6 +168,27 @@ input[type="color"]::-webkit-color-swatch {
   animation: anim-scale-in 380ms cubic-bezier(0.34, 1.8, 0.4, 1) both;
 }
 
+/* Pop "forte" del badge quando si seleziona la macro-sezione: parte piccolo e
+   ruotato, con un rimbalzo marcato e una durata più lunga → feedback evidente. */
+@keyframes anim-section-pop {
+  0%   { opacity: 0; transform: scale(0.5) rotate(-12deg); }
+  55%  { opacity: 1; transform: scale(1.18) rotate(4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.anim-section-pop {
+  animation: anim-section-pop 520ms cubic-bezier(0.34, 1.7, 0.5, 1) both;
+}
+
+/* Entrata del contenuto del main al cambio sezione: fade + slide più ampio e
+   un filo di scale, come una transizione di pagina decisa. */
+@keyframes anim-section-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.anim-section-enter {
+  animation: anim-section-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Animazione "tratto a L" per la guida verde della sub-voce:
    prima la linea verticale cresce dall'alto verso il basso, poi
    l'orizzontale parte dal punto di giunzione e si estende a destra.
@@ -190,10 +256,10 @@ input[type="color"]::-webkit-color-swatch {
    glow interno (box-shadow inset), non la dimensione: così la riga non sborda
    dal container con overflow-x-hidden e non viene tagliata ai lati. */
 @keyframes anim-tag-hover {
-  0%, 100% { box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.5),
-                         inset 0 0 8px -2px rgba(16, 185, 129, 0.25); }
-  50%      { box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.9),
-                         inset 0 0 14px 0 rgba(16, 185, 129, 0.5); }
+  0%, 100% { box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.5),
+                         inset 0 0 8px -2px rgb(var(--accent) / 0.25); }
+  50%      { box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.9),
+                         inset 0 0 14px 0 rgb(var(--accent) / 0.5); }
 }
 .anim-tag-hover {
   animation: anim-tag-hover 1.1s ease-in-out infinite;
@@ -273,12 +339,56 @@ input[type="color"]::-webkit-color-swatch {
     0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
 }
 
-/* Glow emerald sottile per stati attivi/copiati: usato componendo
-   con `ring-emerald-500/40` ecc nei componenti. */
+/* ---------- Tile della griglia Tools/Design ----------
+   A riposo: gradient sottile (non piatto) + un alone accent appena percettibile
+   dietro l'icona, così la card non è mai monotona.
+   Al hover: l'alone si accende, il bordo si tinge d'accent e la card si solleva.
+   Tutto via --accent → rosso nei Tools, viola in Design. */
+.tool-card {
+  background-image: linear-gradient(
+    160deg,
+    rgb(63 63 70 / 0.28) 0%,
+    rgb(39 39 42 / 0.45) 55%,
+    rgb(24 24 27 / 0.55) 100%
+  );
+  transition:
+    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 260ms ease-out,
+    box-shadow 260ms ease-out;
+  will-change: transform;
+}
+.tool-card:hover {
+  transform: translateY(-2px);
+  border-color: rgb(var(--accent) / 0.55);
+  box-shadow:
+    0 0 0 1px rgb(var(--accent) / 0.25),
+    0 10px 28px -10px rgb(var(--accent) / 0.4),
+    0 6px 18px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* alone d'angolo dietro l'icona: soft a riposo, più ampio e intenso al hover */
+.tool-card-glow {
+  background: radial-gradient(
+    circle at center,
+    rgb(var(--accent) / 0.22) 0%,
+    transparent 70%
+  );
+  opacity: 0.5;
+  transition:
+    opacity 260ms ease-out,
+    transform 260ms ease-out;
+}
+.tool-card:hover .tool-card-glow {
+  opacity: 1;
+  transform: scale(1.25);
+}
+
+/* Glow sottile per stati attivi/copiati. Il nome è storico (emerald) ma il
+   colore ora è dinamico: segue l'accent della sezione via --accent. */
 .glow-emerald {
   box-shadow:
-    0 0 0 1px rgba(16, 185, 129, 0.4),
-    0 0 24px -6px rgba(16, 185, 129, 0.35);
+    0 0 0 1px rgb(var(--accent) / 0.4),
+    0 0 24px -6px rgb(var(--accent) / 0.35);
 }
 
 /* Keyboard shortcut pill used in onboarding/tips. */
@@ -315,6 +425,9 @@ input[type="color"]::-webkit-color-swatch {
   .anim-fade-out,
   .anim-scale-in,
   .anim-scale-out,
+  .anim-pop,
+  .anim-section-pop,
+  .anim-section-enter,
   .anim-pulse-soft,
   .guide-grow-y,
   .guide-grow-x,
@@ -333,6 +446,16 @@ input[type="color"]::-webkit-color-swatch {
   }
   .card-lift:hover {
     transform: none !important;
+  }
+  .tool-card,
+  .tool-card-glow {
+    transition: none !important;
+  }
+  .tool-card:hover {
+    transform: none !important;
+  }
+  [data-section] [class*="accent"] {
+    transition: none !important;
   }
   ::view-transition-group(*),
   ::view-transition-old(*),

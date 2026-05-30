@@ -35,6 +35,7 @@ import { GroupDetail } from "./components/GroupDetail";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
+import { ToolsSection } from "./components/ToolsSection";
 
 /// Contenuto dell'anteprima (immagine / file / testo) di una singola clip.
 function DragPreviewBody({ clip }: { clip: Clip }) {
@@ -378,7 +379,10 @@ function App() {
   });
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-transparent text-zinc-100">
+    <div
+      data-section={activeSection ?? "clipboard"}
+      className="app-bg flex h-screen w-screen overflow-hidden text-zinc-100"
+    >
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
@@ -421,6 +425,12 @@ function App() {
             <SettingsIcon className="h-4 w-4" />
           </button>
         </div>
+        {/* il wrapper con key={activeSection} rimonta a ogni cambio sezione, così
+            l'animazione di entrata (fade + slide) riparte come una transizione di pagina */}
+        <div
+          key={activeSection ?? "none"}
+          className="anim-section-enter flex min-h-0 flex-1 flex-col"
+        >
         {activeSection === "clipboard" ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {selectedIds.size > 0 && (
@@ -476,13 +486,13 @@ function App() {
               grouped={!query.trim()}
             />
           </div>
+        ) : activeSection === "tools" ? (
+          <ToolsSection />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 py-4 text-center">
             {activeSection ? (
               <>
-                <p className="text-sm font-medium text-zinc-300">
-                  {activeSection === "tools" ? "Tools" : "Design"}
-                </p>
+                <p className="text-sm font-medium text-zinc-300">Design</p>
                 <p className="max-w-xs text-xs text-zinc-500">Coming soon.</p>
               </>
             ) : (
@@ -490,6 +500,7 @@ function App() {
             )}
           </div>
         )}
+        </div>
       </main>
 
         {/* anteprima della clip trascinata, centrata sul cursore */}

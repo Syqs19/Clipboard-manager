@@ -65,7 +65,7 @@ function SortableCard({
       }}
       style={style}
       className={`cursor-grab select-none rounded-xl active:cursor-grabbing ${
-        isOver ? "ring-2 ring-emerald-500/70" : ""
+        isOver ? "ring-2 ring-accent/70" : ""
       }`}
       {...attributes}
       {...listeners}
@@ -96,7 +96,7 @@ function DraggableCard({
       }}
       style={{ opacity: isDragging ? 0.4 : 1 }}
       className={`cursor-grab select-none rounded-xl active:cursor-grabbing ${
-        isOver ? "ring-2 ring-emerald-500/70" : ""
+        isOver ? "ring-2 ring-accent/70" : ""
       }`}
       {...attributes}
       {...listeners}

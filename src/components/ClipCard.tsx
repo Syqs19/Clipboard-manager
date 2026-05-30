@@ -261,9 +261,9 @@ export function ClipCard({
         editing ? "" : "cursor-pointer hover:bg-zinc-800/70"
       } ${
         selectedForBulk
-          ? "glow-emerald scale-[0.98] border-emerald-500/70 bg-emerald-500/5"
+          ? "glow-emerald scale-[0.98] border-accent/70 bg-accent/5"
           : copied
-            ? "glow-emerald border-emerald-500/60"
+            ? "glow-emerald border-accent/60"
             : selected
               ? "border-zinc-600 bg-zinc-800/60 ring-1 ring-zinc-500/40"
               : "border-zinc-800/60 hover:border-zinc-700/80"
@@ -551,11 +551,11 @@ export function ClipCard({
 
       {/* checkbox in modalità selezione: piccolo bounce al toggle */}
       {selectionMode && !editing && (
-        <div className="absolute right-2 top-2 text-emerald-400">
+        <div className="absolute right-2 top-2 text-accent">
           {selectedForBulk ? (
             <CheckCircle2
               key="checked"
-              className="anim-pop h-5 w-5 fill-emerald-500/20"
+              className="anim-pop h-5 w-5 fill-accent/20"
             />
           ) : (
             <Circle key="unchecked" className="h-5 w-5 text-zinc-500" />

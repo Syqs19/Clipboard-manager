@@ -51,6 +51,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Memory",
     "Win32_UI_Shell",
     "Win32_Security_Cryptography",
+    "Win32_NetworkManagement_IpHelper", # GetExtendedTcpTable, MIB_TCPTABLE_OWNER_PID (Port Killer)
+    "Win32_System_Threading",           # OpenProcess/TerminateProcess/QueryFullProcessImageNameW
+    "Win32_System_Diagnostics_ToolHelp", # snapshot processi (nome anche senza pieni permessi)
+    "Win32_Storage_FileSystem",          # GetFileVersionInfo/VerQueryValue (nome leggibile dell'exe)
 ] }
 # OCR integrato di Windows (WinRT): nessuna dipendenza esterna da bundlare
 windows = { version = "0.61", features = [

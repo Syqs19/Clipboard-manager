@@ -116,6 +116,10 @@ export const api = {
   readImageBytes: (path: string) =>
     invoke<ArrayBuffer>("read_image_bytes", { path }),
   getStats: () => invoke<Stats>("get_stats"),
+  /// Port Killer: elenca le porte TCP in ascolto (port/pid/nome processo).
+  listPorts: () => invoke<PortInfo[]>("list_ports"),
+  /// Termina il processo `pid` (con conferma lato UI).
+  killProcess: (pid: number) => invoke<void>("kill_process", { pid }),
 };
 
 /// Specchio di `commands::Stats` lato Rust.
@@ -127,6 +131,22 @@ export interface Stats {
   tags: number;
   db_bytes: number;
   images_bytes: number;
+}
+
+/// Specchio di `commands::tools::ports::PortInfo` lato Rust.
+export interface PortInfo {
+  port: number;
+  pid: number;
+  /// nome del file eseguibile (es. "node.exe").
+  process_name: string;
+  /// nome leggibile del prodotto (FileDescription, es. "Node.js"); vuoto se assente.
+  display_name: string;
+  /// percorso completo dell'eseguibile (vuoto se non risolvibile).
+  path: string;
+  /// processo di sistema (eseguibile in C:\Windows o PID 0/4): nascondibile dal filtro.
+  is_system: boolean;
+  /// true se la porta ascolta su IPv6, false su IPv4.
+  ipv6: boolean;
 }
 
 /// Categorie sensibili. Specchio di `categorizer::ALL_SENSITIVE_KINDS` lato Rust
