@@ -127,7 +127,7 @@ Backend (`src-tauri/src/`):
 - `error.rs` — **`AppError`** (`thiserror` enum) with `#[from]` for rusqlite/io/serde_json/base64 and `From<String>` for domain messages; `impl Serialize` emits the message string so the frontend still receives a plain error text. All commands return `AppResult<T>`; `?` propagates without `.map_err(|e| e.to_string())`.
 - `settings.rs` — `RuntimeState` (paused / max_history / close_to_tray / dont_save_sensitive / sensitive_ttl / sensitive_kinds / ocr_enabled / max_image_bytes); `ALL_SENSITIVE_KINDS`. `crypto.rs` — DPAPI-wrapped master key + AES-256-GCM helpers. `images.rs` — encrypted PNG save/load + thumbnails. `ocr.rs` — Windows WinRT OCR (off-thread). `transforms.rs` — "Paste as" pure transforms. `win_clipboard.rs` — Win32 FFI (CF_HDROP, CF_HTML/RTF, exclusion flags). `tray.rs` — tray icon + menu.
 
-Frontend (`src/`): `App.tsx` (state, keyboard nav, events, drag&drop, `activeSection` router — **still a large god component, slated for custom-hook extraction**), `components/` (Sidebar, SearchBar, ClipList, ClipCard, GroupDetail, GroupPreview, ImagePreview, SelectionBar, Settings, TagPicker, TransformPicker, CodeBlock, Toaster, Onboarding, UpdateButton), `lib/api.ts` (invoke wrappers + events + the **`ContentType` union** and **`Tag` interface** mirroring the Rust types), `lib/format.ts` (masking + tag colors), `lib/useImageUrl.ts`/`useExitAnimation.ts` (hooks).
+Frontend (`src/`): `App.tsx` (orchestrator: high-level state + `activeSection` router; composes the hooks below — was an ~885-line god component, now ~600), `hooks/` (`useClipboardData` = clips/tags + reload + `clips-changed` + "Copied" flash; `useBulkSelection` = multi-select + bulk ops; `useKeyboardNav` = ESC + ↑↓/Enter/1-9/Del; `useClipDnd` = all drag&drop incl. `collisionDetection`/`snapCenterToCursor`), `components/` (Sidebar, SearchBar, ClipList, ClipCard, GroupDetail, GroupPreview, ImagePreview, SelectionBar, Settings, TagPicker, TransformPicker, CodeBlock, Toaster, Onboarding, UpdateButton), `lib/api.ts` (invoke wrappers + events + the **`ContentType` union** and **`Tag` interface** mirroring the Rust types), `lib/format.ts` (masking + tag colors), `lib/useImageUrl.ts`/`useExitAnimation.ts` (hooks). Tests: Vitest + RTL (`npm test`); `src/test/` (setup + fixtures), `src/App.test.tsx`.
 
 Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (SQLCipher), `key.bin` (DPAPI), `settings.json`, `images/*.png` (encrypted).
 
@@ -138,6 +138,42 @@ Runtime data: `%APPDATA%\com.clipboardmanager.app\` → `clips.db` (SQLCipher), 
 - **Errors via `AppError`** (`AppResult<T>` + `?`), not `Result<_, String>` + `.map_err`.
 - **Shared runtime state** is passed as the single `Arc<RuntimeState>`, not as loose atomics/params.
 - New commands: write them in the right `commands/<section>/` file and they're auto-exported by the `pub use` in `commands/mod.rs` — but still remember to add the line to `invoke_handler!` in `lib.rs` (missing it is a runtime "command not found", not a compile error).
+
+### Design principle: build for the future (modularity first)
+
+**Non-negotiable goal: adding one feature must NOT break ten things.** The owner
+has lived the opposite pain (a small change touched 10 scattered spots); every
+design decision must avoid recreating that. The project will grow with new
+macro-sections (Tools, Design, …) and their tools: write code that accepts them
+"drop-in", not code that has to be reorganized every time.
+
+Practical rules:
+- **Decouple by domain/section.** New code goes in its own module/folder
+  (`commands/<section>/`, `db/<domain>.rs`, dedicated hooks/components), not
+  bolted onto the nearest file. A new section = an isolated folder.
+- **One single source of truth.** No values/types/lists duplicated and kept in
+  sync by hand (this is the #1 cause of "ten things break"). Prefer exhaustive
+  enums, named structs, registries/tables that both the dispatch and the UI read
+  from. If a piece of data lives in two places, merge it.
+- **Make the compiler work for you.** Type things strongly (enums, structs, TS
+  unions) so that adding or changing something produces compile errors that list
+  every spot to update, instead of runtime bugs discovered at random.
+- **A bit of extra structure is OK; speculative abstraction is NOT.** For this
+  project it is right to invest in clean boundaries and extension points *even
+  before* they are strictly needed, because the growth is declared and concrete.
+  The line NOT to cross: abstractions for things with **a single**
+  implementation, or for scenarios that won't arrive (e.g. a `Repository` trait
+  to abstract the one SQLite DB, or "just in case" flexibility). The control
+  question is "does this serve the project's real growth?" — if yes, do it even
+  if it feels early; if it's only "might be useful in theory", don't.
+- **Refactor with behaviour unchanged, then verify.** When you reorganize, do
+  NOT change behaviour in the same step: move/decouple, verify everything is
+  green (`cargo test` + `npx tsc --noEmit`), then change logic in a separate
+  step if needed. Tests are the safety net that lets you refactor fearlessly;
+  when you add non-trivial logic, add the test too.
+- **Surgical changes.** Every changed line must trace to the request; don't
+  "improve" unrelated adjacent code. Modularity is preserved this way too: the
+  less surface you touch, the less breaks.
 
 ### Notable behaviors
 

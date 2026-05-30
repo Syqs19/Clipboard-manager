@@ -1,28 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
-  type Modifier,
-} from "@dnd-kit/core";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useImageUrl } from "./lib/useImageUrl";
+import { useClipboardData } from "./hooks/useClipboardData";
+import { useBulkSelection } from "./hooks/useBulkSelection";
+import { useKeyboardNav } from "./hooks/useKeyboardNav";
+import {
+  useClipDnd,
+  collisionDetection,
+  snapCenterToCursor,
+} from "./hooks/useClipDnd";
 import {
   api,
-  onClipsChanged,
   onOpenSettings,
   SELECT_MODIFIERS,
   type Clip,
   type ContentType,
   type SelectModifier,
-  type Tag,
 } from "./lib/api";
 import { Store } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -36,79 +30,6 @@ import { GroupDetail } from "./components/GroupDetail";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
-
-/// Vero mentre si trascina una card PINNATA: in quel caso il drag è un
-/// riordino del sortable, quindi il detector ignora i bersagli `card:` (merge).
-let draggingPinned = false;
-
-/// Collision detection ibrida.
-/// Per i tag: la hitbox è il rettangolo dell'OVERLAY reale (dove la card è
-/// disegnata), non quello della card originale nella lista. snapCenterToCursor
-/// centra l'overlay sul puntatore, quindi ricostruiamo lo stesso rettangolo
-/// (dimensioni della card centrate su pointerCoordinates) e lo intersechiamo
-/// con ogni riga-tag: basta 1px di sovrapposizione visiva. Niente più
-/// attivazioni "da lontano" causate dalla larghezza piena della card.
-/// Per il riordino card: closestCenter come prima (tag esclusi dai candidati).
-const collisionDetection: CollisionDetection = (args) => {
-  const { pointerCoordinates, droppableContainers } = args;
-  // bersagli "precisi" (tag della sidebar + card per il merge): si attivano
-  // solo se l'overlay li interseca davvero. Trascinando una pinnata (riordino)
-  // i bersagli `card:` vengono ignorati, così il sortable non viene disturbato.
-  const precise = droppableContainers.filter((c) => {
-    const id = String(c.id);
-    if (id.startsWith("tag:")) return true;
-    return id.startsWith("card:") && !draggingPinned;
-  });
-
-  if (pointerCoordinates && precise.length > 0) {
-    // hitbox a dimensione fissa centrata sul cursore (≈ overlay). Non usiamo
-    // collisionRect: per le immagini l'overlay parte a 0×0 finché il blob non
-    // è caricato, e la hitbox risulterebbe un punto → mai intersezione.
-    const w = 200;
-    const h = 80;
-    const ox = pointerCoordinates.x - w / 2;
-    const oy = pointerCoordinates.y - h / 2;
-    let best: { id: string | number; area: number } | null = null;
-    for (const c of precise) {
-      const r = c.rect.current;
-      if (!r) continue;
-      const ix = Math.max(0, Math.min(ox + w, r.left + r.width) - Math.max(ox, r.left));
-      const iy = Math.max(0, Math.min(oy + h, r.top + r.height) - Math.max(oy, r.top));
-      const area = ix * iy;
-      if (area > 0 && (!best || area > best.area)) best = { id: c.id, area };
-    }
-    if (best) return [{ id: best.id }];
-  }
-
-  // nessun bersaglio preciso → riordino dei pinnati (sortable, id numerici),
-  // escludendo i bersagli precisi dai candidati
-  return closestCenter({
-    ...args,
-    droppableContainers: droppableContainers.filter((c) => {
-      const id = String(c.id);
-      return !id.startsWith("tag:") && !id.startsWith("card:");
-    }),
-  });
-};
-
-/// Centra la DragOverlay sul cursore invece di ancorarla all'angolo in alto a
-/// sinistra dell'elemento: così la card "presa" segue il punto di presa.
-const snapCenterToCursor: Modifier = ({
-  activatorEvent,
-  draggingNodeRect,
-  transform,
-}) => {
-  if (!draggingNodeRect || !activatorEvent) return transform;
-  const rect = draggingNodeRect;
-  const ev = activatorEvent as PointerEvent;
-  const offsetX = ev.clientX - rect.left;
-  const offsetY = ev.clientY - rect.top;
-  return {
-    ...transform,
-    x: transform.x + offsetX - rect.width / 2,
-    y: transform.y + offsetY - rect.height / 2,
-  };
-};
 
 /// Contenuto dell'anteprima (immagine / file / testo) di una singola clip.
 function DragPreviewBody({ clip }: { clip: Clip }) {
@@ -174,11 +95,9 @@ function fileLabel(content: string | null): string {
 
 function App() {
   const notify = useNotify();
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [tags, setTags] = useState<Tag[]>(
-    [],
-  );
   const [query, setQuery] = useState("");
+  // dati della Clipboard (clip + tag), reload, evento clips-changed, feedback "Copiato"
+  const { clips, tags, reload, copiedId, flashCopied } = useClipboardData(query);
   // macro-sezione attiva (Clipboard / Strumenti / Design): guida cosa mostra
   // l'area principale. `null` = tutte chiuse (main mostra un placeholder).
   // Il `filter` qui sotto resta interno alla Clipboard.
@@ -196,13 +115,21 @@ function App() {
   const [hotkey, setHotkey] = useState("Ctrl+Shift+V");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectModifier, setSelectModifier] = useState<SelectModifier>("ctrl");
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const lastBulkIndexRef = useRef<number | null>(null);
-  const selectedIdsRef = useRef(selectedIds);
-  selectedIdsRef.current = selectedIds;
   const visibleRef = useRef<Clip[]>([]);
   const selRef = useRef(0);
   const modalRef = useRef(false);
+  // multi-selezione + operazioni bulk (legge la lista visibile via ref)
+  const {
+    selectedIds,
+    selectedIdsRef,
+    clearSelection,
+    onCardBulkClick,
+    deleteSelected,
+    deleteSelectedRef,
+    togglePinSelected,
+    addTagSelected,
+    removeTagSelected,
+  } = useBulkSelection({ getVisible: () => visibleRef.current, reload });
   // la navigazione da tastiera (↑↓ / Enter / 1-9) vale solo nella Clipboard:
   // nelle altre sezioni la lista non è visibile.
   const clipboardActiveRef = useRef(true);
@@ -211,34 +138,10 @@ function App() {
   // le frecce non scorrono la lista dietro al menu.
   const popoverOpenRef = useRef(false);
 
-  const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-    lastBulkIndexRef.current = null;
-  }, []);
-
-  // feedback "Copiato": id della clip appena copiata/risalita (lampeggia ~900ms)
-  const [copiedId, setCopiedId] = useState<number | null>(null);
-  const copiedTimer = useRef<number | undefined>(undefined);
-  const flashCopied = useCallback((id: number) => {
-    setCopiedId(id);
-    window.clearTimeout(copiedTimer.current);
-    copiedTimer.current = window.setTimeout(() => setCopiedId(null), 900);
-  }, []);
+  // `flashCopied` arriva da useClipboardData; la keyboard nav (registrata una
+  // volta) lo legge fresco tramite questo ref.
   const flashRef = useRef(flashCopied);
   flashRef.current = flashCopied;
-
-  const reload = useCallback(async () => {
-    const data = query.trim()
-      ? await api.searchClips(query)
-      : await api.listClips();
-    setClips(data);
-    setTags(await api.listTags());
-  }, [query]);
-
-  // ricarica al mount e quando cambia la ricerca
-  useEffect(() => {
-    reload();
-  }, [reload]);
 
   // legge il modifier per la multi-selezione (default Ctrl)
   useEffect(() => {
@@ -249,32 +152,6 @@ function App() {
         setSelectModifier(m as SelectModifier);
       }
     })();
-  }, []);
-
-  // ESC: chiude prima i modal aperti, poi la selezione bulk, altrimenti nasconde la finestra
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (groupClip) setGroupClip(null);
-      else if (previewClip) setPreviewClip(null);
-      else if (settingsOpen) setSettingsOpen(false);
-      else if (selectedIdsRef.current.size > 0) clearSelection();
-      else getCurrentWindow().hide();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [groupClip, previewClip, settingsOpen, clearSelection]);
-
-  // si sottoscrive una sola volta agli eventi del watcher
-  const reloadRef = useRef(reload);
-  reloadRef.current = reload;
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    onClipsChanged((id) => {
-      reloadRef.current();
-      if (id != null) flashRef.current(id);
-    }).then((u) => (unlisten = u));
-    return () => unlisten?.();
   }, []);
 
   // primo avvio: mostra l'onboarding e leggi l'hotkey corrente
@@ -312,56 +189,25 @@ function App() {
   // riparti dalla cima quando cambia ricerca o filtro
   useEffect(() => setSelectedIndex(0), [query, filter]);
 
-  // navigazione da tastiera: ↑↓ scorri, Invio incolla nell'app attiva, 1-9 rapido
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (modalRef.current || popoverOpenRef.current) return;
-      if (!clipboardActiveRef.current) return;
-      const tag = (document.activeElement as HTMLElement | null)?.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA";
-      const list = visibleRef.current;
-      if (list.length === 0) return;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.min(list.length - 1, i + 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.max(0, i - 1));
-      } else if (e.key === "Enter") {
-        if (tag === "TEXTAREA") return; // a capo nell'editor inline
-        // Nota: i campi che vogliono "consumare" Enter (es. rename tag)
-        // devono chiamare e.stopPropagation() nel proprio handler.
-        const c = list[selRef.current];
-        if (c) {
-          e.preventDefault();
-          // i gruppi non si copiano: Enter apre la vista dettaglio
-          if (c.content_type === "group") {
-            setGroupClip(c);
-          } else {
-            // solo copia, la finestra resta aperta
-            api.copyClip(c.id).catch(() => {});
-            flashRef.current(c.id);
-          }
-        }
-      } else if (/^[1-9]$/.test(e.key) && !typing) {
-        const c = list[parseInt(e.key, 10) - 1];
-        // i gruppi non hanno badge numerico e non si copiano: 1-9 li ignora
-        if (c && c.content_type !== "group") {
-          e.preventDefault();
-          api.copyClip(c.id).catch(() => {});
-          flashRef.current(c.id);
-        }
-      } else if (e.key === "Delete" && !typing) {
-        // Del con selezione bulk attiva → elimina tutte le selezionate
-        if (selectedIdsRef.current.size > 0) {
-          e.preventDefault();
-          deleteSelectedRef.current();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // navigazione da tastiera (ESC + ↑↓/Enter/1-9/Del); legge lo stato vivo via ref
+  useKeyboardNav({
+    groupClip,
+    previewClip,
+    settingsOpen,
+    setGroupClip,
+    setPreviewClip,
+    setSettingsOpen,
+    clearSelection,
+    modalRef,
+    popoverOpenRef,
+    clipboardActiveRef,
+    visibleRef,
+    selRef,
+    selectedIdsRef,
+    deleteSelectedRef,
+    flashRef,
+    setSelectedIndex,
+  });
 
   const isTextLike = (t: ContentType) => t === "text" || t === "url";
   // tipo "effettivo" di un clip: per i gruppi è il tipo dei loro elementi, così
@@ -516,58 +362,6 @@ function App() {
     }
   };
 
-  // multi-selezione: Ctrl/Cmd+click toggle, Shift+click range
-  const onCardBulkClick = (clipIndex: number, e: React.MouseEvent) => {
-    const list = visibleRef.current;
-    const clip = list[clipIndex];
-    if (!clip) return;
-    if (e.shiftKey && lastBulkIndexRef.current != null) {
-      const start = Math.min(lastBulkIndexRef.current, clipIndex);
-      const end = Math.max(lastBulkIndexRef.current, clipIndex);
-      const next = new Set(selectedIdsRef.current);
-      for (let i = start; i <= end; i++) {
-        if (list[i]) next.add(list[i].id);
-      }
-      setSelectedIds(next);
-    } else {
-      const next = new Set(selectedIdsRef.current);
-      if (next.has(clip.id)) next.delete(clip.id);
-      else next.add(clip.id);
-      setSelectedIds(next);
-    }
-    lastBulkIndexRef.current = clipIndex;
-  };
-
-  const deleteSelected = async () => {
-    const ids = Array.from(selectedIdsRef.current);
-    if (ids.length === 0) return;
-    await api.removeClips(ids);
-    clearSelection();
-    reload();
-  };
-  const deleteSelectedRef = useRef(deleteSelected);
-  deleteSelectedRef.current = deleteSelected;
-
-  const togglePinSelected = async (pin: boolean) => {
-    const ids = Array.from(selectedIdsRef.current);
-    if (ids.length === 0) return;
-    await api.bulkSetPinned(ids, pin);
-    reload();
-  };
-
-  const addTagSelected = async (name: string) => {
-    const ids = Array.from(selectedIdsRef.current);
-    if (ids.length === 0) return;
-    await api.bulkAddTag(ids, name);
-    reload();
-  };
-  const removeTagSelected = async (name: string) => {
-    const ids = Array.from(selectedIdsRef.current);
-    if (ids.length === 0) return;
-    await api.bulkRemoveTag(ids, name);
-    reload();
-  };
-
   // stato pinned aggregato della selezione (per il bottone Pinna/Despinna)
   const selectedClips = clips.filter((c) => selectedIds.has(c.id));
   const anyPinned = selectedClips.some((c) => c.pinned);
@@ -580,103 +374,23 @@ function App() {
   const colorOf = (name: string) =>
     tagColor(name, tags.find((t) => t.name === name)?.color ?? null);
 
-  // --- Drag & drop (unico DndContext per Sidebar + lista) ---
-  // Il drag parte dopo 8px così un click breve resta un click (copia/selezione).
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-  );
-  // id della clip in trascinamento (per la DragOverlay); null = nessun drag
-  const [draggingId, setDraggingId] = useState<number | null>(null);
-  // handler di riordino pinnati registrato dalla ClipList (lo stato ottimistico
-  // vive lì dentro, qui chiamiamo solo la funzione al drop su un'altra card)
-  const reorderRef = useRef<(activeId: number, overId: number) => void>(() => {});
-  const draggingClip = clips.find((c) => c.id === draggingId) ?? null;
-  // quante card verranno taggate dal drop: tutta la selezione se trascino una
-  // card selezionata (≥2), altrimenti 1. Guida lo stack nell'anteprima.
-  const dragStackCount =
-    draggingId != null && selectedIds.has(draggingId) && selectedIds.size > 1
-      ? selectedIds.size
-      : 1;
-  // ultima posizione del puntatore durante il drag (per far partire da lì il
-  // "fantasma" che cade dentro il tag, dato che il cursore è nascosto)
-  const pointerRef = useRef({ x: 0, y: 0 });
-  // fantasma che vola dentro il tag al drop: posizione di partenza + vettore
-  const [flying, setFlying] = useState<{
-    clip: Clip;
-    count: number;
-    x: number;
-    y: number;
-    dx: number;
-    dy: number;
-  } | null>(null);
-
-  const onDragStart = (event: DragStartEvent) => {
-    const id = event.active.id as number;
-    setDraggingId(id);
-    // se trascino una pinnata è un riordino: il detector ignora i merge target
-    draggingPinned = clips.find((c) => c.id === id)?.pinned ?? false;
-    // nascondi il cursore mentre trascini: la card stessa fa da puntatore
-    document.body.classList.add("dragging-clip");
-    window.addEventListener("pointermove", trackPointer);
-  };
-  const trackPointer = (e: PointerEvent) => {
-    pointerRef.current = { x: e.clientX, y: e.clientY };
-  };
-  const onDragEnd = (event: DragEndEvent) => {
-    const clip = draggingClip;
-    setDraggingId(null);
-    draggingPinned = false;
-    document.body.classList.remove("dragging-clip");
-    window.removeEventListener("pointermove", trackPointer);
-    const { active, over } = event;
-    if (!over) return;
-    const activeId = active.id as number;
-    if (typeof over.id === "string" && over.id.startsWith("tag:")) {
-      const tagName = over.id.slice(4);
-      // se trascini una card che fa parte della selezione multipla, il drop
-      // tagga tutte le selezionate; altrimenti solo quella trascinata.
-      const sel = selectedIdsRef.current;
-      const ids = sel.has(activeId) && sel.size > 1 ? Array.from(sel) : [activeId];
-      // scrivi subito nel DB, ma fai comparire le chip solo dopo che il
-      // "fantasma" è atterrato (reload ritardato)
-      const write =
-        ids.length > 1 ? api.bulkAddTag(ids, tagName) : api.addTag(activeId, tagName);
-      write.then(() => window.setTimeout(() => reload(), 460));
-      // fantasma che converge verso il centro del tag dal punto di rilascio
-      const r = over.rect;
-      if (clip && r) {
-        const from = pointerRef.current;
-        const tx = r.left + r.width / 2;
-        const ty = r.top + r.height / 2;
-        setFlying({
-          clip,
-          count: ids.length,
-          x: from.x,
-          y: from.y,
-          dx: tx - from.x,
-          dy: ty - from.y,
-        });
-        window.setTimeout(() => setFlying(null), 360);
-      }
-      return;
-    }
-    // drop su una card non pinnata (bersaglio merge, id "card:N")
-    if (typeof over.id === "string" && over.id.startsWith("card:")) {
-      const targetId = Number(over.id.slice(5));
-      if (targetId === activeId) return;
-      const source = clips.find((c) => c.id === activeId);
-      const target = clips.find((c) => c.id === targetId);
-      if (!source || !target) return;
-      // merge se la SORGENTE non è pinnata (così non disturba il sortable) e i
-      // tipi effettivi coincidono. Il bersaglio può essere pinnato o no.
-      if (!source.pinned && effectiveType(source) === effectiveType(target)) {
-        setMergePrompt({ sourceId: activeId, targetId });
-      }
-      return;
-    }
-    // drop su un'altra card pinnata (sortable, id numerico) → riordino
-    if (active.id !== over.id) reorderRef.current(activeId, over.id as number);
-  };
+  // drag & drop (overlay, drop su tag / merge, riordino pinnati)
+  const {
+    sensors,
+    draggingClip,
+    dragStackCount,
+    flying,
+    reorderRef,
+    onDragStart,
+    onDragEnd,
+  } = useClipDnd({
+    clips,
+    selectedIds,
+    selectedIdsRef,
+    reload,
+    setMergePrompt,
+    effectiveType,
+  });
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-transparent text-zinc-100">
