@@ -34,7 +34,7 @@ export function SelectionBar({
   const [untagging, setUntagging] = useState(false);
 
   return (
-    <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-zinc-900/95 px-3 py-2 shadow-md backdrop-blur">
+    <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg border border-accent/40 bg-zinc-900/95 px-3 py-2 shadow-md backdrop-blur">
       <span className="text-sm text-zinc-100">{count} selected</span>
       <div className="ml-auto flex items-center gap-1.5">
         <div className="relative">

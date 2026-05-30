@@ -109,13 +109,13 @@ function SubItem({
             aria-hidden
             className={`${
               guide.exiting ? "guide-shrink-y" : "guide-grow-y"
-            } pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400`}
+            } pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-accent`}
           />
           <span
             aria-hidden
             className={`${
               guide.exiting ? "guide-shrink-x" : "guide-grow-x"
-            } pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-emerald-400`}
+            } pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-accent`}
           />
         </>
       )}
@@ -239,7 +239,7 @@ function ActiveBar({ deps }: { deps: unknown[] }) {
     <span
       ref={ref}
       aria-hidden
-      className={`pointer-events-none absolute -left-1 w-0.5 rounded-full bg-emerald-400 transition-all duration-200 ease-out ${
+      className={`pointer-events-none absolute -left-1 w-0.5 rounded-full bg-accent transition-all duration-200 ease-out ${
         pos ? "opacity-100" : "opacity-0"
       }`}
       style={pos ? { top: pos.top, height: pos.height } : undefined}
@@ -311,7 +311,7 @@ function TagRow({
       <div
         ref={setNodeRef}
         className={`group relative flex w-full min-w-0 items-center gap-2 rounded-md py-1 pl-9 pr-5 text-xs transition-colors ${
-          isOver ? "anim-tag-hover bg-emerald-500/10" : ""
+          isOver ? "anim-tag-hover bg-accent/10" : ""
         } ${received ? "anim-tag-received" : ""} ${
           mainActive
             ? "bg-zinc-700/40 text-zinc-100"
@@ -325,13 +325,13 @@ function TagRow({
               aria-hidden
               className={`${
                 guide.exiting ? "guide-shrink-y" : "guide-grow-y"
-              } pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400`}
+              } pointer-events-none absolute -left-1 -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-accent`}
             />
             <span
               aria-hidden
               className={`${
                 guide.exiting ? "guide-shrink-x" : "guide-grow-x"
-              } pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-emerald-400`}
+              } pointer-events-none absolute -left-1 top-1/2 h-0.5 w-[24px] rounded-full bg-accent`}
             />
           </>
         )}
@@ -408,13 +408,13 @@ function TagRow({
                 aria-hidden
                 className={`${
                   pinnedGuide.exiting ? "guide-shrink-y" : "guide-grow-y"
-                } pointer-events-none absolute left-[2.1rem] -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-emerald-400`}
+                } pointer-events-none absolute left-[2.1rem] -top-1 h-[calc(50%+4px)] w-0.5 rounded-full bg-accent`}
               />
               <span
                 aria-hidden
                 className={`${
                   pinnedGuide.exiting ? "guide-shrink-x" : "guide-grow-x"
-                } pointer-events-none absolute left-[2.1rem] top-1/2 h-0.5 w-[20px] rounded-full bg-emerald-400`}
+                } pointer-events-none absolute left-[2.1rem] top-1/2 h-0.5 w-[20px] rounded-full bg-accent`}
               />
             </>
           )}
@@ -430,34 +430,66 @@ function TagRow({
 /// Header di una macro-sezione: icona + label + chevron. Cliccandolo si attiva
 /// la sezione (e nell'accordion si chiudono le altre). Replica lo stile del
 /// vecchio brand header "Clipboard".
+/// Colore d'accent FISSO di ogni macro-sezione (terna RGB, come in index.css).
+/// Il badge dell'header lo mostra sempre, a prescindere dalla sezione attiva:
+/// così ogni categoria si riconosce dal suo colore. L'accent globale dell'app
+/// (data-section sul root) cambia invece cliccando la sezione.
+const SECTION_ACCENT: Record<Section, string> = {
+  clipboard: "16 185 129", // emerald-500
+  tools: "239 68 68", // red-500
+  design: "139 92 246", // violet-500
+};
+
 function SectionHeader({
+  section,
   icon,
   label,
   open,
+  collapsible,
+  active,
   onClick,
 }: {
+  section: Section;
   icon: React.ReactNode;
   label: string;
+  /** Solo per le sezioni collassabili: ruota il chevron. */
   open: boolean;
+  /** Clipboard è collassabile (ha sotto-voci); Tools/Design sono solo cliccabili. */
+  collapsible: boolean;
+  /** Sezione attualmente selezionata: evidenzia leggermente l'header. */
+  active: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-zinc-800/40"
+      className={`group flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-zinc-800/40 ${
+        active ? "bg-zinc-800/30" : ""
+      }`}
     >
-      <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_18px_-4px_rgba(16,185,129,0.45)]">
+      {/* badge col colore FISSO della sezione (--accent locale), non quello globale.
+          key legata ad `active`: quando la sezione viene selezionata il nodo si
+          rimonta e fa il pop di conferma (.anim-pop). */}
+      <span
+        key={active ? "on" : "off"}
+        style={{ "--accent": SECTION_ACCENT[section] } as React.CSSProperties}
+        className={`relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-accent/40 bg-accent/10 text-accent shadow-[0_0_18px_-4px_rgb(var(--accent)/0.45)] ${
+          active ? "anim-section-pop" : ""
+        }`}
+      >
         {icon}
       </span>
       <span className="flex-1 text-[15px] font-semibold tracking-tight text-zinc-100">
         {label}
       </span>
-      <ChevronDown
-        className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${
-          open ? "" : "-rotate-90"
-        }`}
-      />
+      {collapsible && (
+        <ChevronDown
+          className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${
+            open ? "" : "-rotate-90"
+          }`}
+        />
+      )}
     </button>
   );
 }
@@ -581,7 +613,10 @@ export function Sidebar({
       <div className="-ml-2 flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto pl-2">
       {/* Sezione Clipboard: header + voci (categorie + tag) */}
       <SectionHeader
+        section="clipboard"
         open={clipboardOpen}
+        collapsible
+        active={activeSection === "clipboard"}
         onClick={() => toggleSection("clipboard")}
         label="Clipboard"
         icon={
@@ -720,31 +755,31 @@ export function Sidebar({
         </div>
       </SectionBody>
 
-      {/* Sezione Strumenti: utility di sistema (Port Killer, ...) — in arrivo */}
+      {/* Sezione Strumenti: voce cliccabile (la griglia dei tool vive nel main). */}
       <div className="mt-1">
         <SectionHeader
-          open={activeSection === "tools"}
+          section="tools"
+          open={false}
+          collapsible={false}
+          active={activeSection === "tools"}
           onClick={() => toggleSection("tools")}
           label="Tools"
           icon={<Wrench className="h-4 w-4" />}
         />
       </div>
-      <SectionBody open={activeSection === "tools"} animating={animatingCollapse}>
-        <p className="px-2.5 py-2 text-xs text-zinc-600">Nothing here yet.</p>
-      </SectionBody>
 
-      {/* Sezione Design: strumenti visivi (Pixel Perfect, palette, ...) — in arrivo */}
+      {/* Sezione Design: voce cliccabile (contenuto nel main, in arrivo). */}
       <div className="mt-1">
         <SectionHeader
-          open={activeSection === "design"}
+          section="design"
+          open={false}
+          collapsible={false}
+          active={activeSection === "design"}
           onClick={() => toggleSection("design")}
           label="Design"
           icon={<Palette className="h-4 w-4" />}
         />
       </div>
-      <SectionBody open={activeSection === "design"} animating={animatingCollapse}>
-        <p className="px-2.5 py-2 text-xs text-zinc-600">Nothing here yet.</p>
-      </SectionBody>
       </div>
 
       {/* Update button: appare solo quando c'e' un update disponibile */}

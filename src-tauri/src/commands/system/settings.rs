@@ -25,11 +25,20 @@ pub fn apply_close_to_tray(state: State<Runtime>, value: bool) {
     state.close_to_tray.store(value, Ordering::Relaxed);
 }
 
-/// Cambia l'hotkey globale: deregistra quelle vecchie e registra la nuova.
-/// Ritorna errore se la stringa scorciatoia non è valida.
+/// Cambia l'hotkey globale. Registra PRIMA la nuova: se la stringa non è valida
+/// l'errore esce qui e la scorciatoia precedente resta attiva (niente "buco" che
+/// lascia l'utente senza hotkey). Solo a registrazione riuscita rimuove le vecchie
+/// e ri-registra la nuova, così resta attiva una sola scorciatoia.
 #[tauri::command]
 pub fn apply_hotkey(app: AppHandle, shortcut: String) -> AppResult<()> {
     let gs = app.global_shortcut();
+    // già attiva quella richiesta: niente da fare (evita l'errore "già registrata")
+    if gs.is_registered(shortcut.as_str()) {
+        return Ok(());
+    }
+    // valida la nuova provando a registrarla: se fallisce, la vecchia è intatta
+    gs.register(shortcut.as_str()).map_err(|e| e.to_string())?;
+    // la nuova è valida e attiva: rimuovi tutto e tieni solo lei
     let _ = gs.unregister_all();
     gs.register(shortcut.as_str()).map_err(|e| e.to_string())?;
     Ok(())

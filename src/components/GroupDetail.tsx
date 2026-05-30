@@ -3,21 +3,7 @@ import { Check, Copy, X } from "lucide-react";
 import { api, type Clip, type ClipItem } from "../lib/api";
 import { useImageUrl } from "../lib/useImageUrl";
 import { useExitAnimation } from "../lib/useExitAnimation";
-
-/// Nome del primo file (basename) di un item 'files'.
-function fileItemName(content: string | null): string {
-  if (!content) return "file";
-  try {
-    const paths = JSON.parse(content);
-    if (Array.isArray(paths) && paths.length > 0) {
-      const name = String(paths[0]).split(/[\\/]/).pop() || String(paths[0]);
-      return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
-    }
-  } catch {
-    /* ignora */
-  }
-  return "file";
-}
+import { fileLabel } from "../lib/format";
 
 /// Riga di un singolo elemento nella vista dettaglio.
 function ItemRow({
@@ -70,7 +56,7 @@ function ItemRow({
         ) : (
           <p className="whitespace-pre-wrap break-words text-sm text-zinc-100">
             {item.item_type === "files"
-              ? fileItemName(item.content)
+              ? fileLabel(item.content, "file")
               : item.content ?? ""}
           </p>
         )}

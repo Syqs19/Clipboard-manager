@@ -20,18 +20,11 @@ pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+V";
 
 /// Categorie considerate sensibili ai fini della cancellazione/non-salvataggio.
 /// Default: tutte. La mascheratura nella UI è indipendente da questa selezione.
-pub const ALL_SENSITIVE_KINDS: &[&str] = &[
-    "email",
-    "iban",
-    "card",
-    "token",
-    "codice_fiscale",
-    "ssn",
-    "private_key",
-    "jwt",
-    "crypto",
-    "mask",
-];
+///
+/// Fonte unica: i valori canonici vivono in `categorizer` (le costanti `SK_*`,
+/// prodotte dalla categorizzazione). Qui li ri-esportiamo così i siti che già
+/// usano `settings::ALL_SENSITIVE_KINDS` restano invariati, senza duplicare la lista.
+pub use crate::categorizer::ALL_SENSITIVE_KINDS;
 
 pub struct RuntimeState {
     /// Cattura in pausa (toggle dal tray).

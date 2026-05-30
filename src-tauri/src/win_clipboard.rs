@@ -135,6 +135,7 @@ pub fn read_file_drop() -> Vec<String> {
 pub fn write_file_drop(paths: &[String]) -> bool {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::GlobalFree;
     use windows_sys::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
     };
@@ -165,7 +166,7 @@ pub fn write_file_drop(paths: &[String]) -> bool {
         }
         let ptr = GlobalLock(h) as *mut u8;
         if ptr.is_null() {
-            // HGLOBAL non liberato in caso di errore: leak raro/trascurabile
+            GlobalFree(h); // lock fallito: l'HGLOBAL è ancora nostro, va liberato
             return false;
         }
 
@@ -186,8 +187,12 @@ pub fn write_file_drop(paths: &[String]) -> bool {
         }
         EmptyClipboard();
         let set = SetClipboardData(CF_HDROP, h as windows_sys::Win32::Foundation::HANDLE);
+        // su successo l'HGLOBAL diventa proprietà del sistema; su fallimento resta
+        // nostro e va liberato (altrimenti leak a ogni copia fallita).
+        if set.is_null() {
+            GlobalFree(h);
+        }
         CloseClipboard();
-        // su successo l'HGLOBAL diventa proprietà del sistema
         !set.is_null()
     }
 }
@@ -450,6 +455,7 @@ pub fn read_rtf() -> Option<String> {
 pub fn write_rich_clipboard(plain: &str, html: Option<&str>, rtf: Option<&str>) -> bool {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::GlobalFree;
     use windows_sys::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
     };
@@ -477,11 +483,18 @@ pub fn write_rich_clipboard(plain: &str, html: Option<&str>, rtf: Option<&str>) 
             if !p.is_null() {
                 std::ptr::copy_nonoverlapping(wide_text.as_ptr(), p, wide_text.len());
                 GlobalUnlock(h_txt);
-                ok_txt = !SetClipboardData(
+                let set = SetClipboardData(
                     CF_UNICODETEXT,
                     h_txt as windows_sys::Win32::Foundation::HANDLE,
-                )
-                .is_null();
+                );
+                // su fallimento l'HGLOBAL resta nostro (Windows non lo adotta)
+                if set.is_null() {
+                    GlobalFree(h_txt);
+                } else {
+                    ok_txt = true;
+                }
+            } else {
+                GlobalFree(h_txt); // lock fallito
             }
         }
 
@@ -498,10 +511,16 @@ pub fn write_rich_clipboard(plain: &str, html: Option<&str>, rtf: Option<&str>) 
                         std::ptr::copy_nonoverlapping(payload.as_ptr(), p, payload.len());
                         *p.add(payload.len()) = 0;
                         GlobalUnlock(h);
-                        let _ = SetClipboardData(
+                        if SetClipboardData(
                             cf_html,
                             h as windows_sys::Win32::Foundation::HANDLE,
-                        );
+                        )
+                        .is_null()
+                        {
+                            GlobalFree(h);
+                        }
+                    } else {
+                        GlobalFree(h); // lock fallito
                     }
                 }
             }
@@ -520,10 +539,16 @@ pub fn write_rich_clipboard(plain: &str, html: Option<&str>, rtf: Option<&str>) 
                         std::ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
                         *p.add(bytes.len()) = 0;
                         GlobalUnlock(h);
-                        let _ = SetClipboardData(
+                        if SetClipboardData(
                             cf_rtf,
                             h as windows_sys::Win32::Foundation::HANDLE,
-                        );
+                        )
+                        .is_null()
+                        {
+                            GlobalFree(h);
+                        }
+                    } else {
+                        GlobalFree(h); // lock fallito
                     }
                 }
             }

@@ -9,7 +9,8 @@ import {
   type DragStartEvent,
   type Modifier,
 } from "@dnd-kit/core";
-import { api, type Clip, type ContentType } from "../lib/api";
+import { api, type Clip } from "../lib/api";
+import { effectiveType } from "../lib/format";
 
 /// Vero mentre si trascina una card PINNATA: in quel caso il drag è un
 /// riordino del sortable, quindi il detector ignora i bersagli `card:` (merge).
@@ -103,18 +104,17 @@ export interface FlyingState {
 /// - `clips`/`selectedIds`/`selectedIdsRef`: per risolvere la clip trascinata e
 ///   capire se il drop riguarda la selezione multipla;
 /// - `reload`: ricarica dopo aver taggato;
-/// - `setMergePrompt`: apre la conferma di merge;
-/// - `effectiveType`: confronto di tipo per decidere se due card sono fondibili.
+/// - `setMergePrompt`: apre la conferma di merge.
+/// Il confronto di tipo per decidere se due card sono fondibili usa
+/// `effectiveType` (fonte unica in `lib/format`), non più iniettato da App.
 export function useClipDnd(opts: {
   clips: Clip[];
   selectedIds: Set<number>;
   selectedIdsRef: React.RefObject<Set<number>>;
   reload: () => void;
   setMergePrompt: (m: { sourceId: number; targetId: number } | null) => void;
-  effectiveType: (c: Clip) => ContentType;
 }) {
-  const { clips, selectedIds, selectedIdsRef, reload, setMergePrompt, effectiveType } =
-    opts;
+  const { clips, selectedIds, selectedIdsRef, reload, setMergePrompt } = opts;
 
   // Il drag parte dopo 8px così un click breve resta un click (copia/selezione).
   const sensors = useSensors(

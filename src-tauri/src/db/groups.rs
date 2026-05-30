@@ -223,13 +223,20 @@ impl Db {
         let target_items =
             Self::clip_as_items(&conn, target_id, t_type, t_content, t_image, t_cc)?;
         let preview = format!("Group · {} items", target_items.len() + source_items.len());
-        let hash = format!("group-{now}-{target_id}-{source_id}");
+        // hash temporaneo solo per soddisfare il vincolo NOT NULL/UNIQUE all'INSERT;
+        // subito dopo lo riscrivo con l'id auto-increment (univoco per costruzione),
+        // così due merge nello stesso millisecondo non possono collidere.
+        let tmp_hash = format!("group-tmp-{now}-{target_id}-{source_id}");
         conn.execute(
             "INSERT INTO clips (content, content_type, image_path, preview, created_at, char_count, sensitive, hash, pinned, pinned_order)
              VALUES (NULL, 'group', NULL, ?1, ?2, 0, 0, ?3, ?4, ?5)",
-            params![preview, now, hash, t_pinned, t_pinned_order],
+            params![preview, now, tmp_hash, t_pinned, t_pinned_order],
         )?;
         let group_id = conn.last_insert_rowid();
+        conn.execute(
+            "UPDATE clips SET hash = ?1 WHERE id = ?2",
+            params![format!("group-{group_id}"), group_id],
+        )?;
         insert_items(&conn, group_id, 0, &target_items)?;
         insert_items(&conn, group_id, target_items.len() as i64, &source_items)?;
         // unione dei tag di entrambe le originali sul gruppo

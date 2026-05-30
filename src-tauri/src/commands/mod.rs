@@ -29,6 +29,7 @@ pub(crate) const DEFAULT_LIMIT: i64 = DEFAULT_MAX_HISTORY;
 
 pub mod clipboard;
 pub mod system;
+pub mod tools;
 
 // Re-export piatto: i nomi dei comandi restano `commands::<nome>` per lib.rs.
 pub use clipboard::clips::*;
@@ -37,3 +38,4 @@ pub use clipboard::tags::*;
 pub use system::settings::*;
 pub use system::shell::*;
 pub use system::stats::*;
+pub use tools::ports::*;

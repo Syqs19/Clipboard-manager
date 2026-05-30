@@ -1,6 +1,7 @@
 import { Boxes, FileText } from "lucide-react";
 import { type ClipItem } from "../lib/api";
 import { useImageUrl } from "../lib/useImageUrl";
+import { fileLabel } from "../lib/format";
 
 /// Miniatura di un singolo elemento-immagine del gruppo.
 function ItemThumb({ item }: { item: ClipItem }) {
@@ -15,21 +16,6 @@ function ItemThumb({ item }: { item: ClipItem }) {
   ) : (
     <div className="h-16 w-16 rounded border border-dashed border-zinc-700" />
   );
-}
-
-/// Etichetta del primo file di un item 'files' (basename del primo path).
-function fileItemName(content: string | null): string {
-  if (!content) return "file";
-  try {
-    const paths = JSON.parse(content);
-    if (Array.isArray(paths) && paths.length > 0) {
-      const name = String(paths[0]).split(/[\\/]/).pop() || String(paths[0]);
-      return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
-    }
-  } catch {
-    /* ignora */
-  }
-  return "file";
 }
 
 /// Anteprima aggregata di una clip-gruppo nella lista: badge col conteggio +
@@ -74,7 +60,7 @@ export function GroupPreview({ items }: { items: ClipItem[] }) {
               )}
               <span className="min-w-0 truncate">
                 {type === "files"
-                  ? fileItemName(it.content)
+                  ? fileLabel(it.content, "file")
                   : it.content ?? ""}
               </span>
             </div>

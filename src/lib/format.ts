@@ -1,3 +1,5 @@
+import { type Clip, type ContentType } from "./api";
+
 /// Maschera un valore sensibile lasciando abbastanza contesto per riconoscerlo.
 /// Il contenuto completo resta nel DB ed è copiabile/rivelabile.
 /// - Email: inizio del nome + dominio visibile  → ma••••••@example.it
@@ -85,6 +87,49 @@ export function detectColors(
     out.push({ start: m.index, end: m.index + m[0].length, css: m[0] });
   }
   return out;
+}
+
+/// Vero per i tipi "testuali" (testo o url), trattati insieme in più punti della UI.
+/// Specchio di `ContentType::is_text_like` lato Rust.
+export function isTextLike(t: ContentType): boolean {
+  return t === "text" || t === "url";
+}
+
+/// Tipo "effettivo" di una clip: per i gruppi è il tipo dei loro elementi (così un
+/// gruppo di immagini compare in "Images", uno di testi in "Text", ecc.); per le
+/// clip singole è il loro stesso `content_type`. Fonte unica del concetto, usata sia
+/// dai filtri/conteggi (App) sia dalla regola "fondibili se stesso tipo" (drag&drop).
+export function effectiveType(c: Clip): ContentType {
+  return c.content_type === "group"
+    ? c.items?.[0]?.item_type ?? "text"
+    : c.content_type;
+}
+
+/// Estrae l'ultimo segmento (basename) di un percorso, indipendente dal separatore
+/// (`\` su Windows, `/` altrove). Se il path è vuoto ritorna il path stesso.
+export function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/// Decodifica il `content` di una clip 'files' (JSON array di percorsi).
+/// Ritorna sempre un array (vuoto se il contenuto è assente o malformato).
+export function parseFilePaths(content: string | null): string[] {
+  if (!content) return [];
+  try {
+    const v = JSON.parse(content);
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/// Etichetta di una clip/elemento 'files': basename del primo file, con `+N`
+/// se ce n'è più d'uno. `empty` è il fallback quando non c'è nessun percorso.
+export function fileLabel(content: string | null, empty = ""): string {
+  const paths = parseFilePaths(content);
+  if (paths.length === 0) return empty;
+  const name = baseName(String(paths[0]));
+  return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
 }
 
 /// Tempo relativo conciso (it).

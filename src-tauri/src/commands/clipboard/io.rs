@@ -255,8 +255,15 @@ pub fn import_history(
         let id = db.insert_or_bump_clip(&new)?;
         db.set_pin_raw(id, c.pinned, c.pinned_order)?;
         for tag_name in c.tags {
-            if let Ok(tid) = db.get_or_create_tag(&tag_name, None, false) {
-                let _ = db.attach_tag(id, tid);
+            // import best-effort: un tag che non si attacca non deve far abortire
+            // l'intero import (non è transazionale), ma il fallimento va segnalato.
+            match db.get_or_create_tag(&tag_name, None, false) {
+                Ok(tid) => {
+                    if let Err(e) = db.attach_tag(id, tid) {
+                        eprintln!("[import] tag '{tag_name}' su clip {id}: {e}");
+                    }
+                }
+                Err(e) => eprintln!("[import] creazione tag '{tag_name}': {e}"),
             }
         }
         // ricostruisci gli elementi di una clip-gruppo (immagini da b64 → cifrate)
@@ -282,7 +289,9 @@ pub fn import_history(
                     label: it.label,
                     char_count: it.char_count,
                 };
-                let _ = db.insert_clip_item(id, pos as i64, &new_item);
+                if let Err(e) = db.insert_clip_item(id, pos as i64, &new_item) {
+                    eprintln!("[import] elemento {pos} del gruppo {id}: {e}");
+                }
             }
         }
         imported += 1;

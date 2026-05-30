@@ -15,12 +15,17 @@ import {
   onOpenSettings,
   SELECT_MODIFIERS,
   type Clip,
-  type ContentType,
   type SelectModifier,
 } from "./lib/api";
 import { Store } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { tagColor } from "./lib/format";
+import {
+  tagColor,
+  fileLabel,
+  parseFilePaths,
+  isTextLike,
+  effectiveType,
+} from "./lib/format";
 import { Sidebar, type Filter, type Section } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
@@ -30,6 +35,7 @@ import { GroupDetail } from "./components/GroupDetail";
 import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
+import { ToolsSection } from "./components/ToolsSection";
 
 /// Contenuto dell'anteprima (immagine / file / testo) di una singola clip.
 function DragPreviewBody({ clip }: { clip: Clip }) {
@@ -77,20 +83,6 @@ function DragPreview({ clip, stackCount = 1 }: { clip: Clip; stackCount?: number
       </span>
     </div>
   );
-}
-
-/// Etichetta per una clip di tipo "files": nome del primo file (+N altri),
-/// invece del percorso completo. `content` è un JSON array di path.
-function fileLabel(content: string | null): string {
-  if (!content) return "";
-  try {
-    const paths = JSON.parse(content);
-    if (!Array.isArray(paths) || paths.length === 0) return "";
-    const name = String(paths[0]).split(/[\\/]/).pop() || String(paths[0]);
-    return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
-  } catch {
-    return "";
-  }
 }
 
 function App() {
@@ -209,11 +201,6 @@ function App() {
     setSelectedIndex,
   });
 
-  const isTextLike = (t: ContentType) => t === "text" || t === "url";
-  // tipo "effettivo" di un clip: per i gruppi è il tipo dei loro elementi, così
-  // un gruppo di immagini appare anche in "Images", uno di testi in "Text", ecc.
-  const effectiveType = (c: Clip) =>
-    c.content_type === "group" ? c.items?.[0]?.item_type ?? "text" : c.content_type;
   const typeMatches = (c: Clip, kind: Filter["kind"]) => {
     switch (kind) {
       case "all":
@@ -345,7 +332,7 @@ function App() {
       if (clip.content_type === "url" && text) {
         await openUrl(text);
       } else if (clip.content_type === "files") {
-        const first = (JSON.parse(clip.content || "[]") as string[])[0];
+        const first = parseFilePaths(clip.content)[0];
         if (first) await api.openPath(first);
       }
     } catch (e) {
@@ -389,11 +376,13 @@ function App() {
     selectedIdsRef,
     reload,
     setMergePrompt,
-    effectiveType,
   });
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-transparent text-zinc-100">
+    <div
+      data-section={activeSection ?? "clipboard"}
+      className="app-bg flex h-screen w-screen overflow-hidden text-zinc-100"
+    >
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
@@ -436,6 +425,12 @@ function App() {
             <SettingsIcon className="h-4 w-4" />
           </button>
         </div>
+        {/* il wrapper con key={activeSection} rimonta a ogni cambio sezione, così
+            l'animazione di entrata (fade + slide) riparte come una transizione di pagina */}
+        <div
+          key={activeSection ?? "none"}
+          className="anim-section-enter flex min-h-0 flex-1 flex-col"
+        >
         {activeSection === "clipboard" ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {selectedIds.size > 0 && (
@@ -491,13 +486,13 @@ function App() {
               grouped={!query.trim()}
             />
           </div>
+        ) : activeSection === "tools" ? (
+          <ToolsSection />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 py-4 text-center">
             {activeSection ? (
               <>
-                <p className="text-sm font-medium text-zinc-300">
-                  {activeSection === "tools" ? "Tools" : "Design"}
-                </p>
+                <p className="text-sm font-medium text-zinc-300">Design</p>
                 <p className="max-w-xs text-xs text-zinc-500">Coming soon.</p>
               </>
             ) : (
@@ -505,6 +500,7 @@ function App() {
             )}
           </div>
         )}
+        </div>
       </main>
 
         {/* anteprima della clip trascinata, centrata sul cursore */}

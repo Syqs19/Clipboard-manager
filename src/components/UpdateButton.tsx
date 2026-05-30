@@ -97,7 +97,7 @@ export function UpdateButton() {
       title={
         update?.body ? `Release notes:\n\n${update.body}` : "Install update"
       }
-      className={`anim-fade-in glow-emerald mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-2 text-left text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-progress disabled:opacity-90`}
+      className={`anim-fade-in glow-emerald mt-2 flex items-center gap-2 rounded-lg border border-accent/50 bg-accent/10 px-2.5 py-2 text-left text-sm font-medium text-accent transition-colors hover:bg-accent/20 disabled:cursor-progress disabled:opacity-90`}
     >
       {busy ? (
         <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

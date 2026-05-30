@@ -29,7 +29,7 @@ export function Onboarding({
       >
         {/* Header con logo + welcome */}
         <div className="flex flex-col items-center gap-3 border-b border-zinc-800 px-6 pt-7 pb-5">
-          <span className="relative inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.55)]">
+          <span className="relative inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-accent/40 bg-accent/10 text-accent shadow-[0_0_28px_-6px_rgb(var(--accent)/0.55)]">
             <svg
               viewBox="0 0 24 24"
               fill="none"
