@@ -26,8 +26,10 @@ import { TransformPicker } from "./TransformPicker";
 import { CodeBlock } from "./CodeBlock";
 import { GroupPreview } from "./GroupPreview";
 import {
+  baseName,
   detectColors,
   maskSensitive,
+  parseFilePaths,
   relativeTime,
   splitMatches,
 } from "../lib/format";
@@ -150,15 +152,7 @@ export function ClipCard({
   const hasRtf = !!clip.content_rtf && !isImage && !isFiles;
   const hasRich = hasHtml || hasRtf;
   // per i file, content è un JSON array di path
-  const filePaths: string[] = (() => {
-    if (!isFiles || !clip.content) return [];
-    try {
-      const v = JSON.parse(clip.content);
-      return Array.isArray(v) ? (v as string[]) : [];
-    } catch {
-      return [];
-    }
-  })();
+  const filePaths: string[] = isFiles ? parseFilePaths(clip.content) : [];
 
   // azione rapida in base al tipo: link → browser, file → apri
   const quick = (() => {
@@ -442,7 +436,7 @@ export function ClipCard({
       ) : isFiles ? (
         <div className="flex flex-col gap-1">
           {filePaths.slice(0, 4).map((p) => {
-            const name = p.split(/[\\/]/).pop() || p;
+            const name = baseName(p);
             return (
               <div
                 key={p}

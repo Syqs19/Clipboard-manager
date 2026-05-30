@@ -68,6 +68,15 @@ pub const SK_JWT: &str = "jwt";
 pub const SK_CRYPTO: &str = "crypto";
 pub const SK_MASK: &str = "mask";
 
+/// Tutte le categorie sensibili, in un'unica lista derivata dalle costanti qui
+/// sopra: è la fonte di verità che `settings`/`lib`/i comandi riusano per
+/// validare e inizializzare il set selezionato dall'utente (niente lista
+/// duplicata da tenere allineata a mano).
+pub const ALL_SENSITIVE_KINDS: &[&str] = &[
+    SK_EMAIL, SK_IBAN, SK_CARD, SK_TOKEN, SK_CF, SK_SSN, SK_KEY, SK_JWT,
+    SK_CRYPTO, SK_MASK,
+];
+
 /// Caratteri-maschera tipici (un campo password copiato per sbaglio mostra questi).
 const MASK_CHARS: &[char] = &['*', '•', '●', '·', '∙', '◦', '‣', '▪'];
 

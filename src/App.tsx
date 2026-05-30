@@ -15,12 +15,17 @@ import {
   onOpenSettings,
   SELECT_MODIFIERS,
   type Clip,
-  type ContentType,
   type SelectModifier,
 } from "./lib/api";
 import { Store } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { tagColor } from "./lib/format";
+import {
+  tagColor,
+  fileLabel,
+  parseFilePaths,
+  isTextLike,
+  effectiveType,
+} from "./lib/format";
 import { Sidebar, type Filter, type Section } from "./components/Sidebar";
 import { SearchBar } from "./components/SearchBar";
 import { ClipList } from "./components/ClipList";
@@ -77,20 +82,6 @@ function DragPreview({ clip, stackCount = 1 }: { clip: Clip; stackCount?: number
       </span>
     </div>
   );
-}
-
-/// Etichetta per una clip di tipo "files": nome del primo file (+N altri),
-/// invece del percorso completo. `content` è un JSON array di path.
-function fileLabel(content: string | null): string {
-  if (!content) return "";
-  try {
-    const paths = JSON.parse(content);
-    if (!Array.isArray(paths) || paths.length === 0) return "";
-    const name = String(paths[0]).split(/[\\/]/).pop() || String(paths[0]);
-    return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
-  } catch {
-    return "";
-  }
 }
 
 function App() {
@@ -209,11 +200,6 @@ function App() {
     setSelectedIndex,
   });
 
-  const isTextLike = (t: ContentType) => t === "text" || t === "url";
-  // tipo "effettivo" di un clip: per i gruppi è il tipo dei loro elementi, così
-  // un gruppo di immagini appare anche in "Images", uno di testi in "Text", ecc.
-  const effectiveType = (c: Clip) =>
-    c.content_type === "group" ? c.items?.[0]?.item_type ?? "text" : c.content_type;
   const typeMatches = (c: Clip, kind: Filter["kind"]) => {
     switch (kind) {
       case "all":
@@ -345,7 +331,7 @@ function App() {
       if (clip.content_type === "url" && text) {
         await openUrl(text);
       } else if (clip.content_type === "files") {
-        const first = (JSON.parse(clip.content || "[]") as string[])[0];
+        const first = parseFilePaths(clip.content)[0];
         if (first) await api.openPath(first);
       }
     } catch (e) {
@@ -389,7 +375,6 @@ function App() {
     selectedIdsRef,
     reload,
     setMergePrompt,
-    effectiveType,
   });
 
   return (

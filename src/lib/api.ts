@@ -129,6 +129,8 @@ export interface Stats {
   images_bytes: number;
 }
 
+/// Categorie sensibili. Specchio di `categorizer::ALL_SENSITIVE_KINDS` lato Rust
+/// (le costanti `SK_*`): tenere allineato a mano con l'enum Rust, come `ContentType`.
 export const SENSITIVE_KINDS = [
   "email",
   "iban",

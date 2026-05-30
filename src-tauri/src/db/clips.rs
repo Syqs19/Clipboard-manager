@@ -340,12 +340,23 @@ impl Db {
             "UPDATE clips SET content=?2, content_html=NULL, content_rtf=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7, hash=?8 WHERE id=?1",
             params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind, hash],
         );
-        if with_hash.is_err() {
-            conn.execute(
-                "UPDATE clips SET content=?2, content_html=NULL, content_rtf=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7 WHERE id=?1",
-                params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind],
-            )?;
+        match with_hash {
+            Ok(_) => Ok(()),
+            // Solo il conflitto sull'UNIQUE(hash) (il nuovo contenuto coincide con
+            // un'altra clip) giustifica il fallback "aggiorna tutto tranne l'hash".
+            // Qualsiasi altro errore (es. DB locked) deve propagare, non essere
+            // mascherato da un secondo UPDATE.
+            Err(e)
+                if e.sqlite_error_code()
+                    == Some(rusqlite::ErrorCode::ConstraintViolation) =>
+            {
+                conn.execute(
+                    "UPDATE clips SET content=?2, content_html=NULL, content_rtf=NULL, content_type=?3, preview=?4, char_count=?5, sensitive=?6, sensitive_kind=?7 WHERE id=?1",
+                    params![id, content, content_type, preview, char_count, sensitive as i64, sensitive_kind],
+                )?;
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
-        Ok(())
     }
 }
