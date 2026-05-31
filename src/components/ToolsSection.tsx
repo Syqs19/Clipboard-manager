@@ -43,9 +43,20 @@ function SortableToolCard({
     transition,
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 20 : undefined,
+    // senza questi, premere e trascinare la card avvia la selezione del testo
+    // (label/descrizione) invece del riordino: il PointerSensor ha una soglia di
+    // 8px e in quei px il browser inizia a selezionare. Li blocco sul wrapper drag.
+    touchAction: "none",
+    userSelect: "none",
   };
   return (
-    <div ref={setNodeRef} style={style} {...a11y} {...listeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="cursor-grab active:cursor-grabbing"
+      {...a11y}
+      {...listeners}
+    >
       <ToolCard
         tool={tool}
         favorite={favorite}

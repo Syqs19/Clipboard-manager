@@ -146,7 +146,7 @@ export function Vectorial() {
             icon={busy ? undefined : Download}
             onClick={run}
             disabled={busy}
-            className="self-start"
+            className={`self-start ${busy ? "btn-busy" : ""}`}
           >
             {busy ? (
               <>

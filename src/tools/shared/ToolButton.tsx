@@ -20,8 +20,10 @@ export function ToolButton({
   icon?: LucideIcon;
 }) {
   const hasLabel = children != null && children !== false;
+  // `btn-press` (index.css) dà hover-lift + press-squash e gestisce già la
+  // transizione di colore/bordo, quindi sostituisce `transition-colors`.
   const base =
-    "inline-flex items-center gap-1.5 rounded-md border text-sm transition-colors disabled:opacity-50";
+    "btn-press inline-flex items-center gap-1.5 rounded-md border text-sm disabled:opacity-50";
   const variantClass =
     variant === "accent"
       ? "border-accent/40 font-medium text-accent hover:bg-accent/10"

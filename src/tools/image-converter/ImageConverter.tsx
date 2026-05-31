@@ -279,7 +279,7 @@ export function ImageConverter() {
             icon={busy ? undefined : Download}
             onClick={convertSingle}
             disabled={busy}
-            className="self-start"
+            className={`self-start ${busy ? "btn-busy" : ""}`}
           >
             {busy ? (
               <>
@@ -304,7 +304,7 @@ export function ImageConverter() {
             icon={busy ? undefined : Download}
             onClick={convertBatch}
             disabled={busy}
-            className="self-start"
+            className={`self-start ${busy ? "btn-busy" : ""}`}
           >
             {busy ? (
               <>

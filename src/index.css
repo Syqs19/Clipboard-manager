@@ -339,6 +339,36 @@ input[type="color"]::-webkit-color-swatch {
     0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
 }
 
+/* ---------- Feedback al click dei bottoni (ToolButton) ----------
+   Hover: si solleva di 1px (stesso easing elastico delle card). Press: si
+   "schiaccia" a 0.96 con una transizione rapida → feedback tattile immediato.
+   I bottoni disabilitati non si muovono. */
+.btn-press {
+  transition:
+    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease-out,
+    background-color 200ms ease-out,
+    border-color 200ms ease-out;
+  will-change: transform;
+}
+.btn-press:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn-press:active:not(:disabled) {
+  transform: scale(0.96);
+  transition-duration: 80ms;
+}
+
+/* Bottone in lavorazione (es. "Converting…"): "respira" leggermente senza
+   diventare illeggibile (opacità alta), per segnalare che sta lavorando. */
+@keyframes btn-busy-pulse {
+  0%, 100% { opacity: 1;    }
+  50%      { opacity: 0.72; }
+}
+.btn-busy {
+  animation: btn-busy-pulse 1.2s ease-in-out infinite;
+}
+
 /* ---------- Tile della griglia Tools/Design ----------
    A riposo: gradient sottile (non piatto) + un alone accent appena percettibile
    dietro l'icona, così la card non è mai monotona.
@@ -482,6 +512,16 @@ input[type="color"]::-webkit-color-swatch {
   }
   .card-lift:hover {
     transform: none !important;
+  }
+  .btn-press {
+    transition: none !important;
+  }
+  .btn-press:hover:not(:disabled),
+  .btn-press:active:not(:disabled) {
+    transform: none !important;
+  }
+  .btn-busy {
+    animation: none !important;
   }
   .tool-card,
   .tool-card-glow {
