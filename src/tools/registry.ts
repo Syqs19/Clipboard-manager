@@ -11,6 +11,7 @@ import {
   Fingerprint,
   GitCompareArrows,
   Hash,
+  ImageDown,
   KeyRound,
   Link2,
   Network,
@@ -39,6 +40,7 @@ import { Slug } from "./slug/Slug";
 import { HashCompare } from "./hash-compare/HashCompare";
 import { YamlJson } from "./yaml-json/YamlJson";
 import { Markdown } from "./markdown/Markdown";
+import { ImageConverter } from "./image-converter/ImageConverter";
 
 /// Registry dei Tools: UNICA fonte di verità. Sia la griglia di card sia il
 /// contenitore full-screen leggono da qui — niente liste sincronizzate a mano.
@@ -176,5 +178,12 @@ export const toolsRegistry: ToolDescriptor[] = [
     description: "Write Markdown and preview the rendered output.",
     icon: FileCode,
     component: Markdown,
+  },
+  {
+    id: "image-converter",
+    label: "Image Converter",
+    description: "Convert images between PNG, JPEG, WebP, AVIF and more.",
+    icon: ImageDown,
+    component: ImageConverter,
   },
 ];

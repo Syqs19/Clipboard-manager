@@ -38,4 +38,5 @@ pub use clipboard::tags::*;
 pub use system::settings::*;
 pub use system::shell::*;
 pub use system::stats::*;
+pub use tools::convert::*;
 pub use tools::ports::*;

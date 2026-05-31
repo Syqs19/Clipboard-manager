@@ -120,7 +120,47 @@ export const api = {
   listPorts: () => invoke<PortInfo[]>("list_ports"),
   /// Termina il processo `pid` (con conferma lato UI).
   killProcess: (pid: number) => invoke<void>("kill_process", { pid }),
+  /// Image Converter (file singolo): converte i byte di un'immagine e li scrive
+  /// in `dest`. Ritorna la dimensione (byte) del file scritto. `maxDim` = lato
+  /// lungo massimo (resize, null = nessun ridimensionamento).
+  convertImageBytesToPath: (
+    bytes: number[],
+    dest: string,
+    format: string,
+    quality: number,
+    maxDim: number | null,
+  ) =>
+    invoke<number>("convert_image_bytes_to_path", {
+      bytes,
+      dest,
+      format,
+      quality,
+      maxDim,
+    }),
+  /// Image Converter (batch): converte i file `paths`, scrivendoli in `outDir`.
+  /// Best-effort: ritorna l'esito per ogni file.
+  convertImagesBatch: (
+    paths: string[],
+    outDir: string,
+    format: string,
+    quality: number,
+    maxDim: number | null,
+  ) =>
+    invoke<BatchItem[]>("convert_images_batch", {
+      paths,
+      outDir,
+      format,
+      quality,
+      maxDim,
+    }),
 };
+
+/// Esito della conversione di un file nel batch (specchio di `BatchItem` Rust).
+export interface BatchItem {
+  source: string;
+  output: string | null;
+  error: string | null;
+}
 
 /// Specchio di `commands::Stats` lato Rust.
 export interface Stats {

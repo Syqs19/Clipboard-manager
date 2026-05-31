@@ -25,6 +25,9 @@ pub enum AppError {
     #[error("serializzazione JSON fallita: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("immagine: {0}")]
+    Image(#[from] image::ImageError),
+
     /// Errore di dominio con messaggio già pronto per l'utente
     /// (es. "clip not found", "not an image clip").
     #[error("{0}")]
