@@ -1,11 +1,18 @@
 import {
   Binary,
   Braces,
+  CaseSensitive,
   Clock,
+  Code2,
   Database,
+  FileCode,
+  FileText,
+  FileType2,
+  Fingerprint,
   GitCompareArrows,
   Hash,
   KeyRound,
+  Link2,
   Network,
   QrCode as QrCodeIcon,
   Regex as RegexIcon,
@@ -25,6 +32,13 @@ import { Cron } from "./cron/Cron";
 import { NumberBase } from "./number-base/NumberBase";
 import { FakeData } from "./fake-data/FakeData";
 import { QrCode } from "./qrcode/QrCode";
+import { CaseConverter } from "./case-converter/CaseConverter";
+import { EnvJson } from "./env-json/EnvJson";
+import { HtmlEntities } from "./html-entities/HtmlEntities";
+import { Slug } from "./slug/Slug";
+import { HashCompare } from "./hash-compare/HashCompare";
+import { YamlJson } from "./yaml-json/YamlJson";
+import { Markdown } from "./markdown/Markdown";
 
 /// Registry dei Tools: UNICA fonte di verità. Sia la griglia di card sia il
 /// contenitore full-screen leggono da qui — niente liste sincronizzate a mano.
@@ -113,5 +127,54 @@ export const toolsRegistry: ToolDescriptor[] = [
     description: "Generate a QR code from text or a URL and save it.",
     icon: QrCodeIcon,
     component: QrCode,
+  },
+  {
+    id: "case-converter",
+    label: "Case Converter",
+    description: "Convert between camelCase, snake_case, kebab-case and more.",
+    icon: CaseSensitive,
+    component: CaseConverter,
+  },
+  {
+    id: "env-json",
+    label: ".env ↔ JSON",
+    description: "Convert between .env files and JSON objects.",
+    icon: Code2,
+    component: EnvJson,
+  },
+  {
+    id: "html-entities",
+    label: "HTML Entities",
+    description: "Encode and decode HTML entities (&lt; &amp; &copy;).",
+    icon: FileType2,
+    component: HtmlEntities,
+  },
+  {
+    id: "slug",
+    label: "Slug Generator",
+    description: "Turn any text into a clean URL-friendly slug.",
+    icon: Link2,
+    component: Slug,
+  },
+  {
+    id: "hash-compare",
+    label: "Hash Compare",
+    description: "Hash a file and compare it against an expected checksum.",
+    icon: Fingerprint,
+    component: HashCompare,
+  },
+  {
+    id: "yaml-json",
+    label: "YAML ↔ JSON",
+    description: "Convert between YAML and JSON in both directions.",
+    icon: FileText,
+    component: YamlJson,
+  },
+  {
+    id: "markdown",
+    label: "Markdown Preview",
+    description: "Write Markdown and preview the rendered output.",
+    icon: FileCode,
+    component: Markdown,
   },
 ];
