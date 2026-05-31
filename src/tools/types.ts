@@ -17,4 +17,8 @@ export interface ToolDescriptor {
   /// componente che renderizza il tool a tutto schermo. Nessuna prop richiesta:
   /// il tool è autonomo (chiama `api` da lib/api.ts solo se gli serve un backend).
   component: ComponentType;
+  /// parole-chiave per la ricerca (formati gestiti, sinonimi, azioni). Fonte unica:
+  /// stanno qui col tool, così cercare "png" trova ogni tool che dichiara di
+  /// gestirlo, senza una lista formato→tool separata da tenere in sync.
+  keywords?: string[];
 }

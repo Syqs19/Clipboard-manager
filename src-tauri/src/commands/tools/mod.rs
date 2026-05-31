@@ -3,3 +3,4 @@
 
 pub mod convert;
 pub mod ports;
+pub mod vectorize;

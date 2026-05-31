@@ -153,6 +153,21 @@ export const api = {
       quality,
       maxDim,
     }),
+  /// Vectorial: vettorializza (tracing) i byte di un'immagine raster in un SVG
+  /// scritto in `dest`. `binary` = bianco/nero; `filterSpeckle` = soglia anti-rumore.
+  /// Ritorna la dimensione (byte) dell'SVG scritto.
+  vectorizeImageToPath: (
+    bytes: number[],
+    dest: string,
+    binary: boolean,
+    filterSpeckle: number,
+  ) =>
+    invoke<number>("vectorize_image_to_path", {
+      bytes,
+      dest,
+      binary,
+      filterSpeckle,
+    }),
 };
 
 /// Esito della conversione di un file nel batch (specchio di `BatchItem` Rust).

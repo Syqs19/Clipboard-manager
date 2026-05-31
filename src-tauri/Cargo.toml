@@ -48,6 +48,10 @@ fuzzy-matcher = "0.3"
 sha2 = "0.10"
 md-5 = "0.10"
 thiserror = "2"
+# Vettorializzazione raster→SVG (tool Vectorial). Porta `visioncortex` e una
+# copia di `image 0.23` (Cargo le isola dalla nostra 0.25); non le passiamo mai
+# un'immagine tipata, solo byte RGBA grezzi → nessun conflitto di tipi.
+vtracer = "0.6"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

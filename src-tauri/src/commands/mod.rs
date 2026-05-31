@@ -40,3 +40,4 @@ pub use system::shell::*;
 pub use system::stats::*;
 pub use tools::convert::*;
 pub use tools::ports::*;
+pub use tools::vectorize::*;

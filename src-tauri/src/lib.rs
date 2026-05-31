@@ -369,6 +369,7 @@ pub fn run() {
             commands::kill_process,
             commands::convert_image_bytes_to_path,
             commands::convert_images_batch,
+            commands::vectorize_image_to_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

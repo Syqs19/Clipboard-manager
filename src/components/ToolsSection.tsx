@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronLeft, Star } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronLeft, Search, Star, X } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -61,12 +61,37 @@ function SortableToolCard({
 /// così App.tsx non sa nulla dei singoli tool. Ordine e preferiti sono
 /// persistiti via useToolPrefs (settings.json). Il riordino usa un DndContext
 /// DEDICATO, isolato da quello delle clip in App.
+/// Testo su cui cercare un tool: nome + descrizione + keyword, minuscolo.
+function haystack(tool: ToolDescriptor): string {
+  return [tool.label, tool.description, ...(tool.keywords ?? [])]
+    .join(" ")
+    .toLowerCase();
+}
+
+/// Un tool matcha la query se OGNI termine (separato da spazi) compare nel suo
+/// testo di ricerca. Così "json convert" restringe, non allarga.
+export function matchesQuery(tool: ToolDescriptor, query: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const hay = haystack(tool);
+  return terms.every((t) => hay.includes(t));
+}
+
 export function ToolsSection() {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const { orderedTools, favorites, reorder, toggleFavorite } = useToolPrefs();
   // drag dopo 8px → un click breve resta un click (apre il tool)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  const trimmed = query.trim();
+  const searching = trimmed.length > 0;
+  // risultati della ricerca (solo quando c'è una query); mantiene l'ordine personalizzato.
+  const results = useMemo(
+    () => (searching ? orderedTools.filter((t) => matchesQuery(t, trimmed)) : []),
+    [searching, trimmed, orderedTools],
   );
 
   const openTool = openId
@@ -119,8 +144,59 @@ export function ToolsSection() {
     "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3";
   const hasFav = favTools.length > 0;
 
+  // barra di ricerca dei tool (filtra su nome/descrizione/keyword)
+  const searchBar = (
+    <div className="relative mb-4">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search tools (try “png”, “json”, “hash”)…"
+        className="w-full rounded-lg border border-zinc-700/60 bg-zinc-900/60 py-2 pl-9 pr-9 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-accent/50 focus:outline-none"
+      />
+      {searching && (
+        <button
+          onClick={() => setQuery("")}
+          title="Clear"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-500 hover:text-zinc-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+
+  // ricerca attiva: griglia piatta filtrata (niente sezioni/riordino — durante
+  // una ricerca non avrebbero senso). Mostra anche i preferiti, qui mescolati.
+  if (searching) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {searchBar}
+        {results.length === 0 ? (
+          <p className="py-8 text-center text-sm text-zinc-500">
+            No tools match “{trimmed}”.
+          </p>
+        ) : (
+          <div className={gridClass}>
+            {results.map((tool) => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                favorite={favorites.includes(tool.id)}
+                onOpen={() => setOpenId(tool.id)}
+                onToggleFavorite={() => toggleFavorite(tool.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      {searchBar}
       {/* sezione Favorites: solo se c'è almeno un preferito. */}
       {hasFav && (
         <div className="mb-6">
