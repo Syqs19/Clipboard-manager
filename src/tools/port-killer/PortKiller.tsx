@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCw, Search, X } from "lucide-react";
 import { api, type PortInfo } from "../../lib/api";
 import { useNotify } from "../../components/Toaster";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 /// Port Killer: elenca le porte TCP in ascolto (porta, PID, processo) e permette
 /// di terminare il processo che le tiene, con conferma. Il colore d'accent dei
@@ -218,39 +219,22 @@ export function PortKiller() {
         </div>
       )}
 
-      {/* conferma kill: stesso pattern del mergePrompt, bottone distruttivo rosso */}
+      {/* conferma kill: dialog condiviso, bottone distruttivo rosso */}
       {confirm && (
-        <div
-          onClick={() => setConfirm(null)}
-          className="anim-fade-in fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-6"
+        <ConfirmDialog
+          confirmLabel="Kill"
+          confirmClassName="bg-red-500 hover:bg-red-400"
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => doKill(confirm)}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="anim-scale-in w-full max-w-xs rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
-          >
-            <p className="text-sm text-zinc-200">
-              Kill <span className="font-medium">{confirm.process_name}</span> (PID{" "}
-              {confirm.pid}) on port {confirm.port}?
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              The process will be terminated immediately.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirm(null)}
-                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => doKill(confirm)}
-                className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400"
-              >
-                Kill
-              </button>
-            </div>
-          </div>
-        </div>
+          <p className="text-sm text-zinc-200">
+            Kill <span className="font-medium">{confirm.process_name}</span> (PID{" "}
+            {confirm.pid}) on port {confirm.port}?
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            The process will be terminated immediately.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   );

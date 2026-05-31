@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Toggle } from "../shared/Toggle";
 
 type LineRow =
   | { type: "same"; a: string; b: string }
@@ -155,20 +156,13 @@ export function TextDiff() {
     return { add, del, mod };
   }, [rows]);
 
-  const toggle = (label: string, checked: boolean, on: (v: boolean) => void) => (
-    <label className="flex cursor-pointer select-none items-center gap-1.5 text-sm text-zinc-400">
-      <input type="checkbox" checked={checked} onChange={(e) => on(e.target.checked)} className="h-4 w-4 accent-accent" />
-      {label}
-    </label>
-  );
-
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2">
-        {toggle("Word diff", byWord, setByWord)}
-        {toggle("Ignore whitespace", ignoreWs, setIgnoreWs)}
-        {toggle("Ignore case", ignoreCase, setIgnoreCase)}
-        {toggle("Split view", split, setSplit)}
+        <Toggle label="Word diff" checked={byWord} onChange={setByWord} />
+        <Toggle label="Ignore whitespace" checked={ignoreWs} onChange={setIgnoreWs} />
+        <Toggle label="Ignore case" checked={ignoreCase} onChange={setIgnoreCase} />
+        <Toggle label="Split view" checked={split} onChange={setSplit} />
         {rows.length > 0 && (
           <span className="ml-auto font-mono text-xs">
             <span className="text-emerald-400">+{stats.add}</span>{" "}

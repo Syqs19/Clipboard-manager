@@ -132,6 +132,15 @@ export function fileLabel(content: string | null, empty = ""): string {
   return paths.length > 1 ? `${name} +${paths.length - 1}` : name;
 }
 
+/// Formatta un numero di byte in B / KB / MB / GB leggibili. Fonte unica: prima
+/// la stessa funzione era ridefinita (con nomi diversi) in più tool e in Settings.
+export function humanBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 /// Tempo relativo conciso (it).
 export function relativeTime(ms: number): string {
   const diff = Date.now() - ms;

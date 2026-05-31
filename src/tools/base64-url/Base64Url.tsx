@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { ArrowUpDown, Copy, Trash2 } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { tabBtnClass } from "../shared/ui";
+import { INPUT_TEXTAREA_CLASS } from "../shared/panels";
+import { base64UrlToText } from "../shared/codec";
 
 type Mode = "base64" | "url";
 
@@ -14,14 +18,6 @@ function encodeBase64(text: string, urlSafe: boolean): string {
   if (urlSafe) b64 = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return b64;
 }
-function decodeBase64(b64: string): string {
-  // accetta sia standard sia url-safe: normalizza alfabeto e padding.
-  let s = b64.trim().replace(/-/g, "+").replace(/_/g, "/");
-  while (s.length % 4) s += "=";
-  const bin = atob(s);
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
 
 /// Euristica per l'auto-detect in decode: se il testo contiene % seguito da hex
 /// sembra URL-encoded; altrimenti lo trattiamo come Base64.
@@ -34,7 +30,7 @@ const byteLen = (s: string) => new TextEncoder().encode(s).length;
 /// Base64 / URL encoder: codifica o decodifica testo nei due versi, con swap
 /// rapido input↔output, variante URL-safe, auto-detect in decode e conteggi.
 export function Base64Url() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [mode, setMode] = useState<Mode>("base64");
   const [decode, setDecode] = useState(false); // false = encode, true = decode
   const [urlSafe, setUrlSafe] = useState(false);
@@ -52,7 +48,7 @@ export function Base64Url() {
     try {
       let out: string;
       if (effMode === "base64") {
-        out = decode ? decodeBase64(input) : encodeBase64(input, urlSafe);
+        out = decode ? base64UrlToText(input) : encodeBase64(input, urlSafe);
       } else {
         out = decode ? decodeURIComponent(input) : encodeURIComponent(input);
       }
@@ -69,17 +65,9 @@ export function Base64Url() {
     }
   }
 
-  async function copyOut() {
-    if (result.ok && result.out) {
-      await navigator.clipboard.writeText(result.out);
-      notify("Output copied", "success");
-    }
+  function copyOut() {
+    if (result.ok && result.out) copy(result.out, "Output copied");
   }
-
-  const tabBtn = (active: boolean) =>
-    `px-3 py-1 text-sm transition-colors ${
-      active ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-    }`;
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-3">
@@ -91,7 +79,7 @@ export function Base64Url() {
               key={m}
               onClick={() => setMode(m)}
               disabled={decode && auto}
-              className={`${tabBtn(effMode === m)} disabled:opacity-50`}
+              className={`${tabBtnClass(effMode === m)} px-3 py-1 text-sm disabled:opacity-50`}
             >
               {m === "base64" ? "Base64" : "URL"}
             </button>
@@ -99,33 +87,25 @@ export function Base64Url() {
         </div>
         <div className="flex overflow-hidden rounded-md border border-zinc-700/60">
           {[false, true].map((d) => (
-            <button key={String(d)} onClick={() => setDecode(d)} className={tabBtn(decode === d)}>
+            <button
+              key={String(d)}
+              onClick={() => setDecode(d)}
+              className={`${tabBtnClass(decode === d)} px-3 py-1 text-sm`}
+            >
               {d ? "Decode" : "Encode"}
             </button>
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={swap}
-            disabled={!result.ok || !result.out}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-          >
-            <ArrowUpDown className="h-3.5 w-3.5" /> Swap
-          </button>
-          <button
-            onClick={copyOut}
-            disabled={!result.ok || !result.out}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-          >
-            <Copy className="h-3.5 w-3.5" /> Copy
-          </button>
-          <button
-            onClick={() => setInput("")}
-            disabled={!input}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Clear
-          </button>
+          <ToolButton icon={ArrowUpDown} onClick={swap} disabled={!result.ok || !result.out}>
+            Swap
+          </ToolButton>
+          <ToolButton icon={Copy} onClick={copyOut} disabled={!result.ok || !result.out}>
+            Copy
+          </ToolButton>
+          <ToolButton icon={Trash2} onClick={() => setInput("")} disabled={!input}>
+            Clear
+          </ToolButton>
         </div>
       </div>
 
@@ -168,7 +148,7 @@ export function Base64Url() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={decode ? "Paste encoded text…" : "Type or paste text…"}
             spellCheck={false}
-            className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-accent/50 focus:outline-none"
+            className={`flex-1 ${INPUT_TEXTAREA_CLASS}`}
           />
           <span className="shrink-0 px-1 font-mono text-xs text-zinc-600">
             {input.length} chars · {byteLen(input)} B

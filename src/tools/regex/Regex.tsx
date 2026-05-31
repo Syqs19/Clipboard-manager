@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
 
 const FLAGS = [
   ["g", "global"],
@@ -33,7 +34,7 @@ type MatchInfo = { start: number; end: number; text: string; groups: string[] };
 /// Regex tester: scrivi una regex + flag e un testo; evidenzia i match live,
 /// mostra i gruppi di cattura. Tutto con RegExp nativo (nessuna dipendenza).
 export function Regex() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [pattern, setPattern] = useState("");
   const [flags, setFlags] = useState("g");
   const [text, setText] = useState("");
@@ -102,10 +103,8 @@ export function Regex() {
   function insert(token: string) {
     setPattern((p) => p + token.replace("…", ""));
   }
-  async function copyReplaced() {
-    if (replaced == null) return;
-    await navigator.clipboard.writeText(replaced);
-    notify("Result copied", "success");
+  function copyReplaced() {
+    if (replaced != null) copy(replaced, "Result copied");
   }
 
   return (
@@ -235,13 +234,7 @@ export function Regex() {
               <pre className="min-w-0 flex-1 overflow-auto rounded-md border border-zinc-700/60 bg-zinc-900/60 p-3 font-mono text-sm text-zinc-200">
                 {replaced ?? <span className="text-zinc-600">Result appears here.</span>}
               </pre>
-              <button
-                onClick={copyReplaced}
-                disabled={replaced == null}
-                className="shrink-0 rounded-md border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
+              <ToolButton icon={Copy} onClick={copyReplaced} disabled={replaced == null} className="shrink-0" />
             </div>
           </div>
         )}

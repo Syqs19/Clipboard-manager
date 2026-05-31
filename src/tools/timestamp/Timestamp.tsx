@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Clock, Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { tabBtnClass } from "../shared/ui";
 
 /// "YYYY-MM-DD HH:mm:ss" in locale o UTC.
 function formatDate(d: Date, utc: boolean): string {
@@ -60,7 +61,7 @@ function OutRow({
 /// output (locale, ISO, RFC, relativo), un "now" che ticchetta in tempo reale,
 /// e toggle s/ms e local/UTC. Solo Date.
 export function Timestamp() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [unit, setUnit] = useState<"s" | "ms">("s");
   const [utc, setUtc] = useState(false);
 
@@ -103,11 +104,6 @@ export function Timestamp() {
     return { ok: true as const, value: unit === "s" ? Math.floor(ms / 1000) : ms };
   }, [dateStr, unit, utc]);
 
-  async function copy(text: string) {
-    await navigator.clipboard.writeText(text);
-    notify("Copied", "success");
-  }
-
   const nowVal = unit === "s" ? Math.floor(now / 1000) : now;
 
   return (
@@ -119,9 +115,7 @@ export function Timestamp() {
             <button
               key={u}
               onClick={() => setUnit(u)}
-              className={`px-3 py-1 text-sm transition-colors ${
-                unit === u ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-              }`}
+              className={`${tabBtnClass(unit === u)} px-3 py-1 text-sm`}
             >
               {u === "s" ? "Seconds" : "Millis"}
             </button>
@@ -132,9 +126,7 @@ export function Timestamp() {
             <button
               key={String(u)}
               onClick={() => setUtc(u)}
-              className={`px-3 py-1 text-sm transition-colors ${
-                utc === u ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-              }`}
+              className={`${tabBtnClass(utc === u)} px-3 py-1 text-sm`}
             >
               {u ? "UTC" : "Local"}
             </button>

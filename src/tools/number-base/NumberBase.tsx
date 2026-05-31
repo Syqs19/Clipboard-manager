@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
 
 const BASES = [
   { key: "dec", label: "Decimal", radix: 10, re: /^[0-9]*$/, prefix: "", group: 0 },
@@ -21,7 +22,7 @@ function groupDigits(s: string, n: number): string {
 /// Number base converter: digiti in una base qualsiasi (dec/hex/oct/bin) e gli
 /// altri campi si aggiornano in tempo reale. Usa BigInt per interi grandi.
 export function NumberBase() {
-  const notify = useNotify();
+  const copy = useCopy();
   // valore canonico come BigInt; null = vuoto, undefined = input non valido
   const [value, setValue] = useState<bigint | null>(null);
   // quale campo è in errore (input non valido per la sua base)
@@ -45,19 +46,15 @@ export function NumberBase() {
       setErrorKey(key);
       return;
     }
-    try {
-      setValue(parseBig(text, radix));
-      setErrorKey(null);
-    } catch {
-      setErrorKey(key);
-    }
+    // la regex ammette solo cifre valide per il radix → parseBig non può fallire
+    setValue(parseBig(text, radix));
+    setErrorKey(null);
   }
 
-  async function copy(text: string) {
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
-    notify("Copied", "success");
-  }
+  // la guardia resta qui: copyIfAny è invocata su campi potenzialmente vuoti.
+  const copyIfAny = (text: string) => {
+    if (text) void copy(text);
+  };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-3">
@@ -97,13 +94,7 @@ export function NumberBase() {
                   invalid ? "border-red-500/60" : "border-zinc-700/60 focus:border-accent/50"
                 }`}
               />
-              <button
-                onClick={() => copy(display)}
-                disabled={!display}
-                className="shrink-0 rounded-md border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
+              <ToolButton icon={Copy} onClick={() => copyIfAny(display)} disabled={!display} className="shrink-0" />
             </div>
           </div>
         );

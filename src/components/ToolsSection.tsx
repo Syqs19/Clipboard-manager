@@ -33,6 +33,11 @@ function SortableToolCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: tool.id });
+  // scarta role/tabIndex degli attributes di dnd-kit: ToolCard è già un
+  // role="button" tabbabile con il suo onKeyDown, quindi metterli anche sul
+  // wrapper darebbe due button annidati e due tab stop per la stessa card.
+  // Gli aria-* di dnd-kit restano.
+  const { role: _role, tabIndex: _tabIndex, ...a11y } = attributes;
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -40,7 +45,7 @@ function SortableToolCard({
     zIndex: isDragging ? 20 : undefined,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...a11y} {...listeners}>
       <ToolCard
         tool={tool}
         favorite={favorite}

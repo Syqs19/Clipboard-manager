@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/github-dark.css";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { base64UrlToText } from "../shared/codec";
 
 /// Descrizioni dei claim registrati (RFC 7519) + i più comuni, per spiegare a
 /// colpo d'occhio cosa significano le sigle nel payload.
@@ -42,11 +43,7 @@ function countdown(expSec: number, nowMs: number): string {
 
 /// Decodifica una parte Base64URL di un JWT in JSON.
 function decodePart(part: string): unknown {
-  let s = part.replace(/-/g, "+").replace(/_/g, "/");
-  while (s.length % 4) s += "=";
-  const bin = atob(s);
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return JSON.parse(base64UrlToText(part));
 }
 
 /// I claim temporali standard (in secondi epoch) da rendere leggibili.
@@ -65,7 +62,7 @@ function fmtEpoch(sec: number): string {
 /// formattato + highlight) e rende leggibili i claim temporali (exp/iat/nbf),
 /// segnalando se il token è scaduto. NON verifica la firma (serve la chiave).
 export function Jwt() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [token, setToken] = useState("");
   // tick ogni secondo per il countdown live alla scadenza
   const [now, setNow] = useState(() => Date.now());
@@ -100,10 +97,7 @@ export function Jwt() {
     return hljs.highlight(json, { language: "json" }).value;
   };
 
-  async function copy(value: unknown) {
-    await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
-    notify("Copied", "success");
-  }
+  const copyJson = (value: unknown) => copy(JSON.stringify(value, null, 2));
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-3">
@@ -160,7 +154,7 @@ export function Jwt() {
             <div key={label} className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
-                <button onClick={() => copy(value)} className="text-zinc-500 hover:text-zinc-200">
+                <button onClick={() => copyJson(value)} className="text-zinc-500 hover:text-zinc-200">
                   <Copy className="h-3.5 w-3.5" />
                 </button>
               </div>

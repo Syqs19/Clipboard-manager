@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
 
 /// Spezza una stringa nelle sue "parole" indipendentemente dal case di origine
 /// (camelCase, snake_case, kebab-case, spazi, ecc.).
@@ -45,7 +46,7 @@ function detectCase(s: string): string {
 /// String case converter: digiti un identificatore/frase e vedi tutte le
 /// varianti di case, ognuna copiabile. Nativo, nessuna dipendenza.
 export function CaseConverter() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [input, setInput] = useState("");
 
   const results = useMemo(() => {
@@ -54,15 +55,13 @@ export function CaseConverter() {
   }, [input]);
   const detected = useMemo(() => detectCase(input.trim()), [input]);
 
-  async function copy(text: string) {
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
-    notify("Copied", "success");
-  }
-  async function copyAll() {
+  // la guardia resta qui: copyVariant è invocata su varianti potenzialmente vuote.
+  const copyVariant = (text: string) => {
+    if (text) void copy(text);
+  };
+  function copyAll() {
     const all = results.map((r) => `${r.label}: ${r.value}`).join("\n");
-    await navigator.clipboard.writeText(all);
-    notify("All variants copied", "success");
+    copy(all, "All variants copied");
   }
 
   return (
@@ -80,19 +79,15 @@ export function CaseConverter() {
             Detected: <span className="text-accent">{detected}</span>
           </span>
         )}
-        <button
-          onClick={copyAll}
-          disabled={!input.trim()}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-        >
-          <Copy className="h-3.5 w-3.5" /> Copy all
-        </button>
+        <ToolButton icon={Copy} onClick={copyAll} disabled={!input.trim()} className="ml-auto">
+          Copy all
+        </ToolButton>
       </div>
       <div className="flex flex-col gap-1.5">
         {results.map((r) => (
           <button
             key={r.label}
-            onClick={() => copy(r.value)}
+            onClick={() => copyVariant(r.value)}
             className="group flex items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-left transition-colors hover:border-zinc-700/60 hover:bg-zinc-800/40"
           >
             <span className="w-32 shrink-0 text-xs uppercase tracking-wide text-zinc-500">

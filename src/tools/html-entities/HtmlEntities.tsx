@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { ArrowUpDown, Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { tabBtnClass } from "../shared/ui";
+import { INPUT_TEXTAREA_CLASS } from "../shared/panels";
+import { OutputPane } from "../shared/OutputPane";
 
 /// Codifica i caratteri HTML "pericolosi" in entità. Con `all` codifica anche
 /// ogni carattere non-ASCII come entità numerica (&#NNN;), utile per embeddare
@@ -33,7 +37,7 @@ function decode(text: string): string {
 }
 
 export function HtmlEntities() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [decodeMode, setDecodeMode] = useState(false);
   const [encodeAll, setEncodeAll] = useState(false);
   const [input, setInput] = useState("");
@@ -43,11 +47,8 @@ export function HtmlEntities() {
     [input, decodeMode, encodeAll],
   );
 
-  async function copyOut() {
-    if (out) {
-      await navigator.clipboard.writeText(out);
-      notify("Output copied", "success");
-    }
+  function copyOut() {
+    if (out) copy(out, "Output copied");
   }
 
   return (
@@ -58,9 +59,7 @@ export function HtmlEntities() {
             <button
               key={String(d)}
               onClick={() => setDecodeMode(d)}
-              className={`px-3 py-1 text-sm transition-colors ${
-                decodeMode === d ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-              }`}
+              className={`${tabBtnClass(decodeMode === d)} px-3 py-1 text-sm`}
             >
               {d ? "Decode" : "Encode"}
             </button>
@@ -82,16 +81,16 @@ export function HtmlEntities() {
           Encode all non-ASCII
         </label>
         <div className="ml-auto flex items-center gap-2">
-          <button
+          <ToolButton
+            icon={ArrowUpDown}
             onClick={() => out && (setInput(out), setDecodeMode((d) => !d))}
             disabled={!out}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
           >
-            <ArrowUpDown className="h-3.5 w-3.5" /> Swap
-          </button>
-          <button onClick={copyOut} disabled={!out} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-            <Copy className="h-3.5 w-3.5" /> Copy
-          </button>
+            Swap
+          </ToolButton>
+          <ToolButton icon={Copy} onClick={copyOut} disabled={!out}>
+            Copy
+          </ToolButton>
         </div>
       </div>
 
@@ -101,15 +100,9 @@ export function HtmlEntities() {
           onChange={(e) => setInput(e.target.value)}
           placeholder={decodeMode ? "&lt;div&gt; &amp; &copy;" : "<div> & © …"}
           spellCheck={false}
-          className="min-h-0 resize-none rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-accent/50 focus:outline-none"
+          className={INPUT_TEXTAREA_CLASS}
         />
-        <div className="min-h-0 overflow-auto rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3">
-          {out ? (
-            <pre className="whitespace-pre-wrap break-words font-mono text-sm text-zinc-200">{out}</pre>
-          ) : (
-            <span className="text-sm text-zinc-600">Output appears here.</span>
-          )}
-        </div>
+        <OutputPane output={out} />
       </div>
     </div>
   );

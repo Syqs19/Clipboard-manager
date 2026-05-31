@@ -2,14 +2,16 @@ import { useMemo, useRef, useState } from "react";
 import { Copy } from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { INPUT_TEXTAREA_CLASS } from "../shared/panels";
 
 /// Markdown preview: scrivi markdown a sinistra, vedi il render a destra.
 /// marked produce HTML "vero" → lo SANITIZZIAMO con DOMPurify prima di mostrarlo
 /// (rimuove <script>, on*-handler, ecc.), così l'innerHTML è sicuro. Copia
 /// l'HTML generato e tiene lo scroll dei due pannelli sincronizzato.
 export function Markdown() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [input, setInput] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -32,23 +34,18 @@ export function Markdown() {
     requestAnimationFrame(() => (syncing.current = false));
   }
 
-  async function copyHtml() {
+  function copyHtml() {
     if (!html) return;
-    await navigator.clipboard.writeText(html);
-    notify("HTML copied", "success");
+    copy(html, "HTML copied");
   }
 
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-sm text-zinc-400">Markdown editor with live preview.</span>
-        <button
-          onClick={copyHtml}
-          disabled={!html}
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-        >
-          <Copy className="h-3.5 w-3.5" /> Copy HTML
-        </button>
+        <ToolButton icon={Copy} onClick={copyHtml} disabled={!html}>
+          Copy HTML
+        </ToolButton>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
         <textarea
@@ -58,7 +55,7 @@ export function Markdown() {
           onScroll={(e) => syncScroll(e.currentTarget, previewRef.current)}
           placeholder={"# Title\n\nSome **bold** text and a [link](https://…).\n\n- item one\n- item two"}
           spellCheck={false}
-          className="min-h-0 resize-none rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-accent/50 focus:outline-none"
+          className={INPUT_TEXTAREA_CLASS}
         />
         <div
           ref={previewRef}

@@ -1,41 +1,16 @@
 import { useMemo, useState } from "react";
 import { ArrowRightLeft, Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { tabBtnClass } from "../shared/ui";
+import { INPUT_TEXTAREA_CLASS } from "../shared/panels";
+import { OutputPane } from "../shared/OutputPane";
+import { parseEnv, toEnv } from "./env";
 
 type Dir = "env2json" | "json2env";
 
-/// Parsa un file .env (KEY=value, # commenti, virgolette opzionali) in oggetto.
-function parseEnv(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of text.split("\n")) {
-    const t = line.trim();
-    if (!t || t.startsWith("#")) continue;
-    const eq = t.indexOf("=");
-    if (eq < 0) continue;
-    const key = t.slice(0, eq).trim().replace(/^export\s+/, "");
-    let val = t.slice(eq + 1).trim();
-    // togli virgolette circondanti
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    out[key] = val;
-  }
-  return out;
-}
-
-/// Serializza un oggetto piatto in righe .env (quota i valori con spazi/speciali).
-function toEnv(obj: Record<string, unknown>): string {
-  return Object.entries(obj)
-    .map(([k, v]) => {
-      let val = v == null ? "" : String(v);
-      if (/[\s#"']/.test(val)) val = `"${val.replace(/"/g, '\\"')}"`;
-      return `${k}=${val}`;
-    })
-    .join("\n");
-}
-
 export function EnvJson() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [dir, setDir] = useState<Dir>("env2json");
   const [input, setInput] = useState("");
 
@@ -65,11 +40,8 @@ export function EnvJson() {
       setDir((d) => (d === "env2json" ? "json2env" : "env2json"));
     }
   }
-  async function copyOut() {
-    if (result.ok && result.out) {
-      await navigator.clipboard.writeText(result.out);
-      notify("Output copied", "success");
-    }
+  function copyOut() {
+    if (result.ok && result.out) copy(result.out, "Output copied");
   }
 
   return (
@@ -83,9 +55,7 @@ export function EnvJson() {
             <button
               key={d}
               onClick={() => setDir(d)}
-              className={`px-3 py-1 text-sm transition-colors ${
-                dir === d ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-              }`}
+              className={`${tabBtnClass(dir === d)} px-3 py-1 text-sm`}
             >
               {label}
             </button>
@@ -97,12 +67,12 @@ export function EnvJson() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={swap} disabled={!result.ok || !result.out} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-            <ArrowRightLeft className="h-3.5 w-3.5" /> Swap
-          </button>
-          <button onClick={copyOut} disabled={!result.ok || !result.out} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-            <Copy className="h-3.5 w-3.5" /> Copy
-          </button>
+          <ToolButton icon={ArrowRightLeft} onClick={swap} disabled={!result.ok || !result.out}>
+            Swap
+          </ToolButton>
+          <ToolButton icon={Copy} onClick={copyOut} disabled={!result.ok || !result.out}>
+            Copy
+          </ToolButton>
         </div>
       </div>
 
@@ -112,17 +82,9 @@ export function EnvJson() {
           onChange={(e) => setInput(e.target.value)}
           placeholder={dir === "env2json" ? "API_KEY=abc123\nDEBUG=true" : '{ "API_KEY": "abc123" }'}
           spellCheck={false}
-          className="min-h-0 resize-none rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-accent/50 focus:outline-none"
+          className={INPUT_TEXTAREA_CLASS}
         />
-        <div className="min-h-0 overflow-auto rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-3">
-          {result.ok ? (
-            <pre className="whitespace-pre-wrap break-words font-mono text-sm text-zinc-200">
-              {result.out || <span className="text-zinc-600">Output appears here.</span>}
-            </pre>
-          ) : (
-            <span className="text-sm text-red-400">{result.err}</span>
-          )}
-        </div>
+        <OutputPane output={result.ok ? result.out : ""} error={result.ok ? undefined : result.err} />
       </div>
     </div>
   );

@@ -1,29 +1,13 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Upload, XCircle } from "lucide-react";
-import { md5 } from "js-md5";
-
-/// Hash esadecimale di byte. SHA-* via Web Crypto; MD5 via js-md5.
-async function hashBytes(data: ArrayBuffer, algo: string): Promise<string> {
-  if (algo === "MD5") return md5(data);
-  const buf = await crypto.subtle.digest(algo, data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const ALGOS = ["MD5", "SHA-1", "SHA-256", "SHA-512"] as const;
+import { HASH_ALGOS, type HashAlgo, hashBytes } from "../shared/hash";
+import { humanBytes } from "../../lib/format";
 
 /// Hash / checksum compare: calcola l'hash di un file e lo confronta con un
-/// valore atteso (verifica integrità di un download). Riusa la stessa logica
-/// hash dei Generators; nessuna NUOVA dipendenza (js-md5 già presente).
-/// Dimensione file leggibile.
-function humanSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
+/// valore atteso (verifica integrità di un download). Condivide hashing e lista
+/// algoritmi con i Generators via ../shared/hash (fonte unica).
 export function HashCompare() {
-  const [algo, setAlgo] = useState<(typeof ALGOS)[number]>("SHA-256");
+  const [algo, setAlgo] = useState<HashAlgo>("SHA-256");
   const [fileName, setFileName] = useState("");
   const [fileSize, setFileSize] = useState(0);
   const [fileBuf, setFileBuf] = useState<ArrayBuffer | null>(null);
@@ -66,7 +50,7 @@ export function HashCompare() {
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       {/* algoritmo */}
       <div className="flex flex-wrap gap-1.5">
-        {ALGOS.map((a) => (
+        {HASH_ALGOS.map((a) => (
           <button
             key={a}
             onClick={() => setAlgo(a)}
@@ -99,7 +83,7 @@ export function HashCompare() {
         <Upload className="h-5 w-5" />
         {fileName ? (
           <span className="text-zinc-200">
-            {fileName} <span className="text-zinc-500">· {humanSize(fileSize)}</span>
+            {fileName} <span className="text-zinc-500">· {humanBytes(fileSize)}</span>
           </span>
         ) : (
           <span>Drop a file here or click to choose</span>

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Copy, Trash2 } from "lucide-react";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/github-dark.css";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { Toggle } from "../shared/Toggle";
+import { ToolButton } from "../shared/ToolButton";
+import { humanBytes } from "../../lib/format";
 
 /// Ordina ricorsivamente le chiavi di ogni oggetto (A→Z); array e valori
 /// primitivi restano invariati. Usato dal toggle "Sort keys".
@@ -50,41 +53,12 @@ function computeStats(value: unknown, formatted: string) {
   return { keys, depth, bytes };
 }
 
-function humanBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/// Piccolo interruttore a pillola per le opzioni del tool.
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex cursor-pointer select-none items-center gap-1.5 text-sm text-zinc-400">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-accent"
-      />
-      {label}
-    </label>
-  );
-}
-
 /// JSON formatter/validator: input grezzo a sinistra, output formattato (con
 /// syntax highlighting) a destra. Validazione live. Opzioni a toggle: ordina
 /// chiavi, auto-format, de-escape di JSON stringificato, a-capo, statistiche.
 /// Solo frontend.
 export function JsonFormatter() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [input, setInput] = useState("");
   const [indent, setIndent] = useState(2);
   // opzioni extra (tutte off di default: il tool resta minimale finché non le attivi)
@@ -153,52 +127,31 @@ export function JsonFormatter() {
     setInput(JSON.stringify(shaped));
   }
 
-  async function copyOutput() {
+  function copyOutput() {
     if (!formatted) return;
-    await navigator.clipboard.writeText(formatted);
-    notify("Formatted JSON copied", "success");
+    copy(formatted, "Formatted JSON copied");
   }
 
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-3">
       {/* toolbar: azioni principali + stato di validazione */}
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => applyFormat(2)}
-          disabled={!valid}
-          className="rounded-md border border-accent/40 px-2.5 py-1 text-sm font-medium text-accent transition-colors hover:bg-accent/10 disabled:opacity-50"
-        >
+        <ToolButton variant="accent" onClick={() => applyFormat(2)} disabled={!valid}>
           Format
-        </button>
-        <button
-          onClick={() => applyFormat(4)}
-          disabled={!valid}
-          className="rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-        >
+        </ToolButton>
+        <ToolButton onClick={() => applyFormat(4)} disabled={!valid}>
           4 spaces
-        </button>
-        <button
-          onClick={minify}
-          disabled={!valid}
-          className="rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-        >
+        </ToolButton>
+        <ToolButton onClick={minify} disabled={!valid}>
           Minify
-        </button>
+        </ToolButton>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={copyOutput}
-            disabled={!valid}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-          >
-            <Copy className="h-3.5 w-3.5" /> Copy
-          </button>
-          <button
-            onClick={() => setInput("")}
-            disabled={!input}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Clear
-          </button>
+          <ToolButton icon={Copy} onClick={copyOutput} disabled={!valid}>
+            Copy
+          </ToolButton>
+          <ToolButton icon={Trash2} onClick={() => setInput("")} disabled={!input}>
+            Clear
+          </ToolButton>
         </div>
       </div>
 

@@ -18,13 +18,7 @@ import {
   type SensitiveKind,
   type Stats,
 } from "../lib/api";
-
-/// Formatta un numero di byte in B / KB / MB.
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
+import { humanBytes } from "../lib/format";
 
 const REPO_URL = "https://github.com/Syqs19/Clipboard-manager";
 
@@ -570,17 +564,17 @@ export function Settings({
                   </Row>
                   <Row title="Database size" hint="Encrypted clips.db (+ WAL)">
                     <span className="text-sm tabular-nums text-zinc-100">
-                      {formatBytes(stats.db_bytes)}
+                      {humanBytes(stats.db_bytes)}
                     </span>
                   </Row>
                   <Row title="Images size" hint="Encrypted PNGs + thumbnails on disk">
                     <span className="text-sm tabular-nums text-zinc-100">
-                      {formatBytes(stats.images_bytes)}
+                      {humanBytes(stats.images_bytes)}
                     </span>
                   </Row>
                   <Row title="Total disk usage">
                     <span className="text-sm font-semibold tabular-nums text-emerald-400">
-                      {formatBytes(stats.db_bytes + stats.images_bytes)}
+                      {humanBytes(stats.db_bytes + stats.images_bytes)}
                     </span>
                   </Row>
                 </>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Copy } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
 
 /// Trasforma un testo in slug URL-friendly: rimuove accenti/diacritici
 /// (normalize NFD), porta in minuscolo, e collassa tutto ciò che non è
@@ -25,7 +26,7 @@ function clamp(slug: string, max: number, sep: string): string {
 }
 
 export function Slug() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [input, setInput] = useState("");
   const [sep, setSep] = useState("-");
   const [limit, setLimit] = useState(false);
@@ -36,11 +37,8 @@ export function Slug() {
     return limit ? clamp(s, maxLen, sep) : s;
   }, [input, sep, limit, maxLen]);
 
-  async function copy() {
-    if (slug) {
-      await navigator.clipboard.writeText(slug);
-      notify("Slug copied", "success");
-    }
+  function copySlug() {
+    if (slug) copy(slug, "Slug copied");
   }
 
   return (
@@ -89,9 +87,7 @@ export function Slug() {
         <code className="min-w-0 flex-1 break-all rounded-md border border-zinc-700/60 bg-zinc-900/60 px-3 py-2 font-mono text-sm text-zinc-200">
           {slug || <span className="text-zinc-600">slug appears here</span>}
         </code>
-        <button onClick={copy} disabled={!slug} className="shrink-0 rounded-md border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-          <Copy className="h-4 w-4" />
-        </button>
+        <ToolButton icon={Copy} onClick={copySlug} disabled={!slug} className="shrink-0" />
       </div>
       {slug && <span className="font-mono text-xs text-zinc-600">{slug.length} characters</span>}
     </div>

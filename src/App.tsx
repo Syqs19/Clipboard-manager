@@ -36,6 +36,7 @@ import { SelectionBar } from "./components/SelectionBar";
 import { useNotify } from "./components/Toaster";
 import { Onboarding } from "./components/Onboarding";
 import { ToolsSection } from "./components/ToolsSection";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 
 /// Contenuto dell'anteprima (immagine / file / testo) di una singola clip.
 function DragPreviewBody({ clip }: { clip: Clip }) {
@@ -547,42 +548,25 @@ function App() {
 
       {/* conferma merge al drop di una card su un'altra dello stesso tipo */}
       {mergePrompt && (
-        <div
-          onClick={() => setMergePrompt(null)}
-          className="anim-fade-in fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-6"
+        <ConfirmDialog
+          confirmLabel="Merge"
+          confirmClassName="bg-emerald-500 hover:bg-emerald-400"
+          onCancel={() => setMergePrompt(null)}
+          onConfirm={async () => {
+            const { sourceId, targetId } = mergePrompt;
+            setMergePrompt(null);
+            try {
+              await api.mergeClips(sourceId, targetId);
+              await reload();
+            } catch (e) {
+              notify(`Couldn't merge: ${e}`, "error");
+            }
+          }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="anim-scale-in w-full max-w-xs rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
-          >
-            <p className="text-sm text-zinc-200">
-              Merge these two clips into a group?
-            </p>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                onClick={() => setMergePrompt(null)}
-                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  const { sourceId, targetId } = mergePrompt;
-                  setMergePrompt(null);
-                  try {
-                    await api.mergeClips(sourceId, targetId);
-                    await reload();
-                  } catch (e) {
-                    notify(`Couldn't merge: ${e}`, "error");
-                  }
-                }}
-                className="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-400"
-              >
-                Merge
-              </button>
-            </div>
-          </div>
-        </div>
+          <p className="text-sm text-zinc-200">
+            Merge these two clips into a group?
+          </p>
+        </ConfirmDialog>
       )}
 
       <Onboarding

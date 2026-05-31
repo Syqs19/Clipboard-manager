@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Copy, RefreshCw } from "lucide-react";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { Toggle } from "../shared/Toggle";
+import { tabBtnClass } from "../shared/ui";
 
 type Mode = "lorem" | "data";
 
@@ -53,7 +56,7 @@ type FieldKey = keyof typeof FIELDS;
 const ALL_FIELDS: FieldKey[] = ["id", "name", "email", "phone", "address", "company", "date", "bool"];
 
 export function FakeData() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [mode, setMode] = useState<Mode>("lorem");
   const [count, setCount] = useState(3);
   const [out, setOut] = useState("");
@@ -84,10 +87,8 @@ export function FakeData() {
     }
   }
 
-  async function copy() {
-    if (!out) return;
-    await navigator.clipboard.writeText(out);
-    notify("Copied", "success");
+  function copyOut() {
+    if (out) copy(out);
   }
 
   return (
@@ -101,9 +102,7 @@ export function FakeData() {
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`px-3 py-1 text-sm transition-colors ${
-                mode === m ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-              }`}
+              className={`${tabBtnClass(mode === m)} px-3 py-1 text-sm`}
             >
               {label}
             </button>
@@ -120,22 +119,19 @@ export function FakeData() {
             className="w-16 rounded-md border border-zinc-700/60 bg-zinc-900/60 px-2 py-1 text-sm text-zinc-200 focus:border-accent/50 focus:outline-none"
           />
         </label>
-        <button onClick={generate} className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-accent/40 px-2.5 py-1 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
-          <RefreshCw className="h-3.5 w-3.5" /> Generate
-        </button>
-        <button onClick={copy} disabled={!out} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-          <Copy className="h-3.5 w-3.5" /> Copy
-        </button>
+        <ToolButton variant="accent" icon={RefreshCw} onClick={generate} className="ml-auto">
+          Generate
+        </ToolButton>
+        <ToolButton icon={Copy} onClick={copyOut} disabled={!out}>
+          Copy
+        </ToolButton>
       </div>
 
       {/* selezione dei campi (solo per Fake data JSON) */}
       {mode === "data" && (
         <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2">
           {ALL_FIELDS.map((f) => (
-            <label key={f} className="flex cursor-pointer select-none items-center gap-1.5 text-sm text-zinc-400">
-              <input type="checkbox" checked={fields.has(f)} onChange={() => toggleField(f)} className="h-4 w-4 accent-accent" />
-              {f}
-            </label>
+            <Toggle key={f} label={f} checked={fields.has(f)} onChange={() => toggleField(f)} />
           ))}
         </div>
       )}

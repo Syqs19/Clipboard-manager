@@ -1,21 +1,12 @@
 import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Upload } from "lucide-react";
-import { md5 } from "js-md5";
-import { useNotify } from "../../components/Toaster";
+import { useCopy } from "../../hooks/useCopy";
+import { ToolButton } from "../shared/ToolButton";
+import { Toggle } from "../shared/Toggle";
+import { HASH_ALGOS, type HashAlgo, hashBytes, hashText } from "../shared/hash";
+import { tabBtnClass } from "../shared/ui";
 
 type Tab = "uuid" | "hash" | "password";
-
-/// Hash esadecimale di byte/testo. SHA-* via Web Crypto; MD5 via js-md5.
-async function hashBytes(data: ArrayBuffer | Uint8Array, algo: string): Promise<string> {
-  if (algo === "MD5") return md5(data as ArrayBuffer);
-  const buf = await crypto.subtle.digest(algo, data as BufferSource);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-async function hashText(text: string, algo: string): Promise<string> {
-  return hashBytes(new TextEncoder().encode(text), algo);
-}
-
-const HASH_ALGOS = ["MD5", "SHA-1", "SHA-256", "SHA-384", "SHA-512"] as const;
 
 /// UUID v7: 48 bit di timestamp (ms) + versione 7 + bit casuali. A differenza
 /// del v4 (random puro), il v7 è ordinabile per tempo di creazione.
@@ -73,7 +64,7 @@ function strength(pw: string, poolSize: number): { score: number; label: string 
 }
 
 export function Generators() {
-  const notify = useNotify();
+  const copy = useCopy();
   const [tab, setTab] = useState<Tab>("uuid");
 
   // ---- UUID ----
@@ -87,7 +78,7 @@ export function Generators() {
 
   // ---- Hash ----
   const [hashInput, setHashInput] = useState("");
-  const [algo, setAlgo] = useState<(typeof HASH_ALGOS)[number]>("SHA-256");
+  const [algo, setAlgo] = useState<HashAlgo>("SHA-256");
   const [hashOut, setHashOut] = useState("");
   const [fileName, setFileName] = useState("");
   useEffect(() => {
@@ -131,11 +122,11 @@ export function Generators() {
   })();
   const pwStrength = strength(pw, poolSize);
 
-  async function copy(text: string) {
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
-    notify("Copied", "success");
-  }
+  // copia solo se c'è del testo (la guardia resta qui: copy() è invocata su
+  // valori potenzialmente vuoti — uuid/hash/password non ancora generati).
+  const copyIfAny = (text: string) => {
+    if (text) void copy(text);
+  };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -144,9 +135,7 @@ export function Generators() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 px-3 py-1.5 text-sm capitalize transition-colors ${
-              tab === t ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-            }`}
+            className={`${tabBtnClass(tab === t)} flex-1 px-3 py-1.5 text-sm capitalize`}
           >
             {t}
           </button>
@@ -161,9 +150,7 @@ export function Generators() {
                 <button
                   key={v}
                   onClick={() => setUuidVer(v)}
-                  className={`px-3 py-1 text-sm uppercase transition-colors ${
-                    uuidVer === v ? "bg-accent/15 text-accent" : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-                  }`}
+                  className={`${tabBtnClass(uuidVer === v)} px-3 py-1 text-sm uppercase`}
                 >
                   {v}
                 </button>
@@ -180,16 +167,16 @@ export function Generators() {
                 className="w-16 rounded-md border border-zinc-700/60 bg-zinc-900/60 px-2 py-1 text-sm text-zinc-200 focus:border-accent/50 focus:outline-none"
               />
             </label>
-            <button onClick={() => setUuids(gen())} className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-accent/40 px-2.5 py-1 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
-              <RefreshCw className="h-3.5 w-3.5" /> Generate
-            </button>
-            <button onClick={() => copy(uuids.join("\n"))} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/80">
-              <Copy className="h-3.5 w-3.5" /> Copy all
-            </button>
+            <ToolButton variant="accent" icon={RefreshCw} onClick={() => setUuids(gen())} className="ml-auto">
+              Generate
+            </ToolButton>
+            <ToolButton icon={Copy} onClick={() => copyIfAny(uuids.join("\n"))}>
+              Copy all
+            </ToolButton>
           </div>
           <div className="flex max-h-72 flex-col gap-1 overflow-auto rounded-md border border-zinc-800/60 bg-zinc-900/40 p-2">
             {uuids.map((u, i) => (
-              <button key={i} onClick={() => copy(u)} title="Copy" className="rounded px-2 py-1 text-left font-mono text-sm text-zinc-200 transition-colors hover:bg-zinc-800/60">
+              <button key={i} onClick={() => copyIfAny(u)} title="Copy" className="rounded px-2 py-1 text-left font-mono text-sm text-zinc-200 transition-colors hover:bg-zinc-800/60">
                 {u}
               </button>
             ))}
@@ -240,9 +227,7 @@ export function Generators() {
             <code className="min-w-0 flex-1 break-all rounded-md border border-zinc-700/60 bg-zinc-900/60 px-3 py-2 font-mono text-sm text-zinc-200">
               {hashOut || <span className="text-zinc-600">Hash appears here.</span>}
             </code>
-            <button onClick={() => copy(hashOut)} disabled={!hashOut} title="Copy" className="shrink-0 rounded-md border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-              <Copy className="h-4 w-4" />
-            </button>
+            <ToolButton icon={Copy} onClick={() => copyIfAny(hashOut)} disabled={!hashOut} title="Copy" className="shrink-0" />
           </div>
         </div>
       )}
@@ -267,25 +252,18 @@ export function Generators() {
               ["digits", "0-9"],
               ["symbols", "!@#"],
             ] as const).map(([key, label]) => (
-              <label key={key} className="flex cursor-pointer select-none items-center gap-1.5 text-sm text-zinc-400">
-                <input
-                  type="checkbox"
-                  checked={sets[key]}
-                  onChange={(e) => setSets((s) => ({ ...s, [key]: e.target.checked }))}
-                  className="h-4 w-4 accent-accent"
-                />
-                {label}
-              </label>
-            ))}
-            <label className="flex cursor-pointer select-none items-center gap-1.5 text-sm text-zinc-400">
-              <input
-                type="checkbox"
-                checked={noAmbiguous}
-                onChange={(e) => setNoAmbiguous(e.target.checked)}
-                className="h-4 w-4 accent-accent"
+              <Toggle
+                key={key}
+                label={label}
+                checked={sets[key]}
+                onChange={(v) => setSets((s) => ({ ...s, [key]: v }))}
               />
-              No ambiguous (O0 l1)
-            </label>
+            ))}
+            <Toggle
+              label="No ambiguous (O0 l1)"
+              checked={noAmbiguous}
+              onChange={setNoAmbiguous}
+            />
           </div>
           {/* barra di robustezza */}
           <div className="flex items-center gap-2">
@@ -311,12 +289,8 @@ export function Generators() {
             <code className="min-w-0 flex-1 break-all rounded-md border border-zinc-700/60 bg-zinc-900/60 px-3 py-2 font-mono text-sm text-zinc-200">
               {pw || <span className="text-zinc-600">Pick at least one character set.</span>}
             </code>
-            <button onClick={() => setPw(genPassword(pwLen, sets, noAmbiguous))} title="Generate" className="shrink-0 rounded-md border border-accent/40 p-2 text-accent transition-colors hover:bg-accent/10">
-              <RefreshCw className="h-4 w-4" />
-            </button>
-            <button onClick={() => copy(pw)} disabled={!pw} title="Copy" className="shrink-0 rounded-md border border-zinc-700/60 bg-zinc-800/60 p-2 text-zinc-300 transition-colors hover:bg-zinc-800/80 disabled:opacity-50">
-              <Copy className="h-4 w-4" />
-            </button>
+            <ToolButton variant="accent" icon={RefreshCw} onClick={() => setPw(genPassword(pwLen, sets, noAmbiguous))} title="Generate" className="shrink-0" />
+            <ToolButton icon={Copy} onClick={() => copyIfAny(pw)} disabled={!pw} title="Copy" className="shrink-0" />
           </div>
         </div>
       )}

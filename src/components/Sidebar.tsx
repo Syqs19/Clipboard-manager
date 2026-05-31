@@ -430,16 +430,6 @@ function TagRow({
 /// Header di una macro-sezione: icona + label + chevron. Cliccandolo si attiva
 /// la sezione (e nell'accordion si chiudono le altre). Replica lo stile del
 /// vecchio brand header "Clipboard".
-/// Colore d'accent FISSO di ogni macro-sezione (terna RGB, come in index.css).
-/// Il badge dell'header lo mostra sempre, a prescindere dalla sezione attiva:
-/// così ogni categoria si riconosce dal suo colore. L'accent globale dell'app
-/// (data-section sul root) cambia invece cliccando la sezione.
-const SECTION_ACCENT: Record<Section, string> = {
-  clipboard: "16 185 129", // emerald-500
-  tools: "239 68 68", // red-500
-  design: "139 92 246", // violet-500
-};
-
 function SectionHeader({
   section,
   icon,
@@ -468,12 +458,14 @@ function SectionHeader({
         active ? "bg-zinc-800/30" : ""
       }`}
     >
-      {/* badge col colore FISSO della sezione (--accent locale), non quello globale.
+      {/* badge col colore FISSO della sezione: `data-section` fa risolvere la
+          terna --accent dalla stessa regola CSS di index.css (fonte unica), così
+          il badge mostra il colore della sua sezione a prescindere da quella attiva.
           key legata ad `active`: quando la sezione viene selezionata il nodo si
           rimonta e fa il pop di conferma (.anim-pop). */}
       <span
         key={active ? "on" : "off"}
-        style={{ "--accent": SECTION_ACCENT[section] } as React.CSSProperties}
+        data-section={section}
         className={`relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-accent/40 bg-accent/10 text-accent shadow-[0_0_18px_-4px_rgb(var(--accent)/0.45)] ${
           active ? "anim-section-pop" : ""
         }`}
