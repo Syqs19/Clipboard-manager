@@ -99,6 +99,9 @@ export function ToolsSection() {
   }
 
   const favTools = orderedTools.filter((t) => favorites.includes(t.id));
+  // "All tools" mostra solo i NON preferiti: un tool che è nei Favorites non
+  // compare anche qui (niente doppione).
+  const otherTools = orderedTools.filter((t) => !favorites.includes(t.id));
 
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
@@ -109,12 +112,12 @@ export function ToolsSection() {
 
   const gridClass =
     "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3";
+  const hasFav = favTools.length > 0;
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      {/* sezione Favorites: solo se c'è almeno un preferito. Non riordinabile
-          (segue l'ordine generale); il riordino avviene su "All tools". */}
-      {favTools.length > 0 && (
+      {/* sezione Favorites: solo se c'è almeno un preferito. */}
+      {hasFav && (
         <div className="mb-6">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
             <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" />
@@ -134,32 +137,37 @@ export function ToolsSection() {
         </div>
       )}
 
-      {/* All tools: riordinabile via drag (DndContext dedicato) */}
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-        All tools
-      </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={onDragEnd}
-      >
-        <SortableContext
-          items={orderedTools.map((t) => t.id)}
-          strategy={rectSortingStrategy}
-        >
-          <div className={gridClass}>
-            {orderedTools.map((tool) => (
-              <SortableToolCard
-                key={tool.id}
-                tool={tool}
-                favorite={favorites.includes(tool.id)}
-                onOpen={() => setOpenId(tool.id)}
-                onToggleFavorite={() => toggleFavorite(tool.id)}
-              />
-            ))}
+      {/* tool non preferiti: riordinabili via drag (DndContext dedicato).
+          L'header diventa "Other tools" se ci sono già dei preferiti sopra. */}
+      {otherTools.length > 0 && (
+        <>
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            {hasFav ? "Other tools" : "All tools"}
           </div>
-        </SortableContext>
-      </DndContext>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext
+              items={otherTools.map((t) => t.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className={gridClass}>
+                {otherTools.map((tool) => (
+                  <SortableToolCard
+                    key={tool.id}
+                    tool={tool}
+                    favorite={false}
+                    onOpen={() => setOpenId(tool.id)}
+                    onToggleFavorite={() => toggleFavorite(tool.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </>
+      )}
     </div>
   );
 }
